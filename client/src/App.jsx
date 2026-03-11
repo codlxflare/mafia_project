@@ -50,6 +50,7 @@ export default function App() {
   const [speakHost, setSpeakHost] = useState(true);
   const [soundEffects, setSoundEffects] = useState(true);
   const [ttsError, setTtsError] = useState(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [keyCheck, setKeyCheck] = useState(null);
   const [connected, setConnected] = useState(true);
   const speakHostRef = useRef(false);
@@ -60,6 +61,7 @@ export default function App() {
   const ttsQueueRef = useRef([]);
   const ttsPlayingRef = useRef(false);
   const ttsAudioRef = useRef(null);
+  const ttsBlockedRef = useRef(false);
   const audioContextRef = useRef(null);
   const nightSyncRequestedRef = useRef(false);
   useEffect(() => { speakHostRef.current = speakHost; }, [speakHost]);
@@ -96,7 +98,6 @@ export default function App() {
     };
   }, []);
 
-  // Разблокировка аудио по первому клику (браузер требует user gesture для play).
   const unlockAudio = useCallback(() => {
     if (typeof window === 'undefined') return;
     let ctx = audioContextRef.current;
@@ -112,28 +113,9 @@ export default function App() {
     }
   }, []);
 
-  // Озвучка голосом браузера (Web Speech API) — работает без API и в любом регионе.
-  const playWithBrowserTts = useCallback((text, onEnd) => {
-    if (typeof window === 'undefined' || !text?.trim()) {
-      onEnd?.();
-      return;
-    }
-    const synth = window.speechSynthesis;
-    if (!synth) {
-      onEnd?.();
-      return;
-    }
-    const u = new SpeechSynthesisUtterance(text.trim());
-    u.lang = 'ru-RU';
-    u.rate = 0.95;
-    u.onend = () => onEnd?.();
-    u.onerror = () => onEnd?.();
-    synth.speak(u);
-  }, []);
-
-  // Очередь озвучки: сначала ИИ (OpenAI), при 403/сети — автоматически голос браузера.
+  // Очередь озвучки: только ИИ (OpenAI/ElevenLabs). Без браузерной озвучки; при ошибке — сообщение и кнопка «Включить озвучку».
   const processTtsQueue = useCallback(() => {
-    if (ttsPlayingRef.current || ttsQueueRef.current.length === 0) return;
+    if (ttsBlockedRef.current || ttsPlayingRef.current || ttsQueueRef.current.length === 0) return;
     const text = ttsQueueRef.current.shift();
     if (!text) {
       processTtsQueue();
@@ -142,12 +124,11 @@ export default function App() {
     setTtsError(null);
     ttsPlayingRef.current = true;
 
-    const tryBrowserFallback = (reason) => {
-      setTtsError(reason || 'ИИ-голос недоступен. Озвучка браузером.');
-      playWithBrowserTts(text, () => {
-        ttsPlayingRef.current = false;
-        processTtsQueue();
-      });
+    const serverOnlyFail = (reason) => {
+      setTtsError(reason || 'Озвучка недоступна. Нажмите «Включить озвучку».');
+      ttsQueueRef.current.unshift(text);
+      ttsPlayingRef.current = false;
+      ttsBlockedRef.current = true;
     };
 
     fetch('/api/tts', {
@@ -160,14 +141,12 @@ export default function App() {
         if (!r.ok) {
           const body = contentType.includes('json') ? await r.json().catch(() => ({})) : {};
           const serverMsg = body?.error || r.statusText;
-          const isRegion = r.status === 403;
-          const hint = serverMsg && serverMsg !== 'Ошибка синтеза речи' ? serverMsg : (isRegion ? 'ИИ недоступен в регионе/сети. Озвучка браузером.' : 'ИИ-озвучка недоступна. Озвучка браузером.');
-          tryBrowserFallback(hint);
+          const hint = serverMsg && serverMsg !== 'Ошибка синтеза речи' ? serverMsg : 'ИИ-озвучка недоступна. Нажмите «Включить озвучку».';
+          serverOnlyFail(hint);
           return;
         }
         if (!contentType.includes('audio')) {
-          const msg = await r.text();
-          setTtsError(msg || 'Неверный ответ сервера');
+          setTtsError(await r.text().catch(() => '') || 'Неверный ответ сервера');
           ttsPlayingRef.current = false;
           processTtsQueue();
           return;
@@ -189,15 +168,13 @@ export default function App() {
             };
             ttsAudioRef.current = source;
             source.start(0);
-          }).catch((err) => {
-            tryBrowserFallback('Ошибка декодирования. Озвучка браузером.');
-          });
+          }).catch(() => serverOnlyFail('Ошибка декодирования. Нажмите «Включить озвучку».'));
           return;
         }
         const url = URL.createObjectURL(new Blob([arrayBuffer], { type: 'audio/mpeg' }));
         const audio = new Audio(url);
         ttsAudioRef.current = audio;
-        audio.play().catch(() => tryBrowserFallback('Воспроизведение заблокировано. Озвучка браузером.'));
+        audio.play().catch(() => serverOnlyFail('Нажмите «Включить озвучку» для воспроизведения.'));
         audio.onended = () => {
           URL.revokeObjectURL(url);
           ttsAudioRef.current = null;
@@ -207,9 +184,17 @@ export default function App() {
       })
       .catch((err) => {
         const isNetwork = /timeout|failed|network/i.test(err?.message || '') || err?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT';
-        tryBrowserFallback(isNetwork ? 'Нет доступа к ИИ (сеть/регион). Озвучка браузером.' : null);
+        serverOnlyFail(isNetwork ? 'Нет доступа к серверу озвучки. Нажмите «Включить озвучку».' : null);
       });
-  }, [playWithBrowserTts]);
+  }, []);
+
+  const onEnableTts = useCallback(() => {
+    unlockAudio();
+    setAudioUnlocked(true);
+    ttsBlockedRef.current = false;
+    setTtsError(null);
+    processTtsQueue();
+  }, [unlockAudio, processTtsQueue]);
 
   const playHostText = useCallback((text, isUserGesture = false) => {
     if (!text || typeof window === 'undefined') return;
@@ -436,7 +421,8 @@ export default function App() {
         onRoomSettings={setRoomSettings}
         speakHost={speakHost}
         setSpeakHost={setSpeakHost}
-        onUnlockAudio={unlockAudio}
+        audioUnlocked={audioUnlocked}
+        onEnableTts={onEnableTts}
         onTestVoice={testVoice}
         ttsError={ttsError}
         setTtsError={setTtsError}
@@ -474,6 +460,8 @@ export default function App() {
       hostAnnouncedNightStep={hostAnnouncedNightStep}
       speakHost={speakHost}
       setSpeakHost={setSpeakHost}
+      audioUnlocked={audioUnlocked}
+      onEnableTts={onEnableTts}
       onTestVoice={testVoice}
       ttsError={ttsError}
       setTtsError={setTtsError}

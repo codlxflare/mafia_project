@@ -4,6 +4,8 @@
  *   TTS_PROVIDER=openai|elevenlabs  — провайдер (по умолчанию openai).
  *   Для OpenAI: OPENAI_API_KEY, TTS_VOICE (alloy|echo|fable|onyx|nova|shimmer).
  *   Для ElevenLabs: ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID (id голоса для русского).
+ *   TTS_CF_WORKER_URL — если задан, ElevenLabs вызывается через Cloudflare Worker (для Beget/датацентров, ключ в секретах Worker).
+ *   TTS_CF_WORKER_SECRET — опционально, Bearer-токен для вызова Worker.
  *   TTS_PROXY или HTTPS_PROXY — прокси для запросов (например через VPN): http://127.0.0.1:port или socks5://127.0.0.1:port
  */
 
@@ -99,6 +101,7 @@ async function checkElevenLabsKey() {
 export async function checkTtsKey() {
   const provider = getProvider();
   if (provider === 'elevenlabs') {
+    if ((process.env.TTS_CF_WORKER_URL || '').trim()) return { ok: true };
     const result = await checkElevenLabsKey();
     if (result.ok) return result;
     if (process.env.OPENAI_API_KEY) {
@@ -160,7 +163,34 @@ async function synthesizeOpenAI(text, withoutProxy = false) {
   }
 }
 
-/** Синтез через ElevenLabs. При 403 (Cloudflare) бросает с err.isCloudflareBlock = true. При ошибке прокси — повтор без прокси. */
+/** Синтез через Cloudflare Worker (прокси ElevenLabs). Ключ хранится в секретах Worker. */
+async function synthesizeElevenLabsViaWorker(text) {
+  const workerUrl = (process.env.TTS_CF_WORKER_URL || '').trim();
+  if (!workerUrl) throw new Error('TTS_CF_WORKER_URL не задан');
+  const headers = { 'Content-Type': 'application/json' };
+  const secret = (process.env.TTS_CF_WORKER_SECRET || '').trim();
+  if (secret) headers['Authorization'] = `Bearer ${secret}`;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || ELEVENLABS_DEFAULT_VOICE;
+  const response = await fetch(workerUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ text: text.trim(), voice_id: voiceId }),
+  });
+  if (!response.ok) {
+    const errBody = await response.text();
+    let msg = errBody.slice(0, 300);
+    try {
+      const j = JSON.parse(errBody);
+      if (j?.error) msg = j.error;
+    } catch (_) {}
+    const err = new Error(msg || `Worker error ${response.status}`);
+    err.status = response.status;
+    throw err;
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/** Синтез через ElevenLabs (прямой вызов API). При 403 (Cloudflare) бросает с err.isCloudflareBlock = true. При ошибке прокси — повтор без прокси. */
 async function synthesizeElevenLabs(text, withoutProxy = false) {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error('TTS не настроен: задайте ELEVENLABS_API_KEY в server/.env');
@@ -223,6 +253,8 @@ export async function synthesizeSpeech(text) {
   const provider = getProvider();
   if (provider === 'elevenlabs') {
     try {
+      const workerUrl = (process.env.TTS_CF_WORKER_URL || '').trim();
+      if (workerUrl) return await synthesizeElevenLabsViaWorker(text);
       return await synthesizeElevenLabs(text);
     } catch (e) {
       if (process.env.OPENAI_API_KEY) {
@@ -246,6 +278,6 @@ export async function synthesizeSpeech(text) {
 /** Является ли TTS настроенным (есть ключ для выбранного провайдера). */
 export function isTtsConfigured() {
   const provider = getProvider();
-  if (provider === 'elevenlabs') return !!process.env.ELEVENLABS_API_KEY;
+  if (provider === 'elevenlabs') return !!(process.env.ELEVENLABS_API_KEY || (process.env.TTS_CF_WORKER_URL || '').trim());
   return !!process.env.OPENAI_API_KEY;
 }

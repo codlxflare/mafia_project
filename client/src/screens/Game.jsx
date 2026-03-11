@@ -45,6 +45,8 @@ export default function Game({
   hostAnnouncedNightStep = null,
   speakHost,
   setSpeakHost,
+  audioUnlocked,
+  onEnableTts,
   onTestVoice,
   ttsError,
   setTtsError,
@@ -359,23 +361,26 @@ export default function Game({
                 checked={speakHost}
                 onChange={(e) => {
                   setSpeakHost(e.target.checked);
-                  if (e.target.checked && onTestVoice) setTimeout(onTestVoice, 0);
+                  if (e.target.checked && audioUnlocked && onTestVoice) setTimeout(onTestVoice, 0);
                 }}
               />
               <span>Озвучивать ведущего</span>
             </label>
+            {speakHost && !audioUnlocked && (
+              <button type="button" className="btn primary small" onClick={onEnableTts}>Включить озвучку</button>
+            )}
             {typeof setSoundEffects === 'function' && (
               <label className="tts-toggle">
                 <input type="checkbox" checked={soundEffects} onChange={(e) => setSoundEffects(e.target.checked)} />
                 <span>Звуки фаз</span>
               </label>
             )}
-            <button type="button" className="btn secondary small" onClick={onTestVoice}>Проверить</button>
+            <button type="button" className="btn secondary small" onClick={onTestVoice} disabled={!audioUnlocked}>Проверить</button>
             <button type="button" className="btn secondary small" onClick={onCheckKey} disabled={keyCheck?.checking}>
               {keyCheck?.checking ? '…' : 'Ключ'}
             </button>
             {keyCheck && !keyCheck.checking && (keyCheck.ok ? <span className="key-ok">✓</span> : <span className="key-err">{keyCheck.error}</span>)}
-            {ttsError && <p className="tts-error small">{ttsError} <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}>скрыть</button></p>}
+            {ttsError && <p className="tts-error small">{ttsError} <button type="button" className="btn-link-inline" onClick={onEnableTts}>Включить озвучку</button> <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}>скрыть</button></p>}
           </div>
         </details>
       )}

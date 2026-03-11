@@ -1,6 +1,6 @@
 import { AVATAR_IDS, getAvatarEmoji } from '../avatars';
 
-export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost, onUnlockAudio, onTestVoice, ttsError, setTtsError, keyCheck, onCheckKey }) {
+export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost, audioUnlocked, onEnableTts, onTestVoice, ttsError, setTtsError, keyCheck, onCheckKey }) {
   const playerIds = room?.playerIds || [];
   const playerNames = room?.playerNames || {};
   const playerAvatars = room?.playerAvatars || {};
@@ -112,14 +112,19 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
               checked={speakHost}
               onChange={(e) => {
                 const checked = e.target.checked;
-                if (checked) onUnlockAudio?.();
                 setSpeakHost(checked);
-                if (checked && onTestVoice) setTimeout(() => onTestVoice(), 0);
+                if (checked && audioUnlocked && onTestVoice) setTimeout(() => onTestVoice(), 0);
               }}
             />
             <span>Озвучивать ведущего (ИИ-голос, колонка)</span>
           </label>
-          {speakHost && (
+          {speakHost && !audioUnlocked && (
+            <div className="tts-enable-overlay">
+              <p>Чтобы слышать ведущего в колонку, нажмите один раз:</p>
+              <button type="button" className="btn primary" onClick={onEnableTts}>Включить озвучку</button>
+            </div>
+          )}
+          {speakHost && audioUnlocked && (
             <>
               <button type="button" className="btn secondary" onClick={onTestVoice}>
                 Проверить озвучку
@@ -127,7 +132,8 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
               {ttsError && (
                 <p className="tts-error">
                   {ttsError}
-                  <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}> скрыть</button>
+                  <button type="button" className="btn-link-inline" onClick={onEnableTts}>Включить озвучку</button>
+                  <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}>скрыть</button>
                 </p>
               )}
             </>

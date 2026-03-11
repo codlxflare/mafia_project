@@ -1057,4 +1057,5 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.MAFIA_TEST_PORT || process.env.PORT || 3000;
-httpServer.listen(PORT, () => console.log(`Mafia server http://localhost:${PORT}`));
+const HOST = process.env.HOST || '0.0.0.0';
+httpServer.listen(PORT, HOST, () => console.log(`Mafia server http://${HOST}:${PORT}`));
