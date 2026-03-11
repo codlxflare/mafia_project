@@ -1,0 +1,20 @@
+{
+  "name": "mafia-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "test": "node --test gameLogic.test.js hostAI.test.js sync-spec.test.js",
+    "test:sync": "node --test sync.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "undici": "^6.23.0"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.7.2"
+  }
+}

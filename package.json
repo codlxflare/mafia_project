@@ -1,0 +1,13 @@
+{
+  "name": "mafia_project",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n s,c \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "docx": "^9.5.2"
+  }
+}

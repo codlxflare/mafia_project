@@ -1,0 +1,69 @@
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --accent: #e94560;
+  --accent-dim: #c73e54;
+  --text: #eaeaea;
+  --muted: #a0a0a0;
+  --success: #0f9d58;
+  --danger: #e94560;
+  --radius: 16px;
+  --font: 'Manrope', -apple-system, sans-serif;
+  /* Плавная смена фаз игры */
+  --phase-duration: 1s;
+  --phase-ease: cubic-bezier(0.4, 0, 0.15, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+  transition: transform 0.1s, opacity 0.2s;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input {
+  font-family: var(--font);
+  border-radius: var(--radius);
+  border: 2px solid var(--surface);
+  background: var(--surface);
+  color: var(--text);
+  padding: 14px 18px;
+  font-size: 1rem;
+}
+
+input::placeholder {
+  color: var(--muted);
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
