@@ -155,6 +155,29 @@ export default function Game({
     : aliveIds.filter((id) => id !== playerId);
   const canVoteInTieBreak = !voteTieFavorites || !voteTieFavorites.includes(playerId);
 
+  const isDead = dead.includes(playerId);
+  const isAliveForVote = aliveIds.includes(playerId);
+  const nightChoiceAllowed = !hostAnnouncedNightStep || (nightTurn && hostAnnouncedNightStep === `night_${nightTurn.step}`);
+
+  const sendNightChoice = (payload, chosenName) => {
+    if (typeof window !== 'undefined') console.log('[Mafia:Client]', 'emit night_choice', Object.keys(payload || {}));
+    socket?.emit('night_choice', payload);
+    if (payload.victimId !== undefined) setMyChoice(payload.victimId == null ? { id: 'nobody', name: 'Никого' } : { id: payload.victimId, name: chosenName });
+    if (payload.savedId != null) setMyChoice({ id: payload.savedId, name: chosenName });
+    if (payload.checkId != null) setMyChoice({ id: payload.checkId, name: chosenName });
+    if (payload.shootId != null) setMyChoice({ id: payload.shootId, name: chosenName });
+    if (payload.veteranProtect !== undefined) setMyChoice({ id: 'veteran', name: payload.veteranProtect ? 'Защита' : 'Пропуск' });
+  };
+
+  const sendVote = (targetId, name) => {
+    socket?.emit('vote', targetId);
+    setMyVote({ id: targetId, name });
+  };
+
+  const startVoting = () => {
+    socket?.emit('start_voting');
+  };
+
   const { tableSelectableIds, tableChosenId, tableOnSelect, tableSelectionHint } = (() => {
     if (phase === 'night' && nightTurn && !isDead && nightChoiceAllowed) {
       if (nightTurn.step === 'mafia') {
@@ -217,28 +240,6 @@ export default function Game({
     return () => socket.off('detective_result', onResult);
   }, [socket]);
 
-  const sendNightChoice = (payload, chosenName) => {
-    if (typeof window !== 'undefined') console.log('[Mafia:Client]', 'emit night_choice', Object.keys(payload || {}));
-    socket?.emit('night_choice', payload);
-    if (payload.victimId !== undefined) setMyChoice(payload.victimId == null ? { id: 'nobody', name: 'Никого' } : { id: payload.victimId, name: chosenName });
-    if (payload.savedId != null) setMyChoice({ id: payload.savedId, name: chosenName });
-    if (payload.checkId != null) setMyChoice({ id: payload.checkId, name: chosenName });
-    if (payload.shootId != null) setMyChoice({ id: payload.shootId, name: chosenName });
-    if (payload.veteranProtect !== undefined) setMyChoice({ id: 'veteran', name: payload.veteranProtect ? 'Защита' : 'Пропуск' });
-  };
-
-  const sendVote = (targetId, name) => {
-    socket?.emit('vote', targetId);
-    setMyVote({ id: targetId, name });
-  };
-
-  const startVoting = () => {
-    socket?.emit('start_voting');
-  };
-
-  const isDead = dead.includes(playerId);
-  const isAliveForVote = aliveIds.includes(playerId);
-  const nightChoiceAllowed = !hostAnnouncedNightStep || (nightTurn && hostAnnouncedNightStep === `night_${nightTurn.step}`);
   const showNightWait = phase === 'night' && !isDead && (!nightTurn || !nightChoiceAllowed);
   const phaseClass = [
     (phase === 'roles' || phase === 'roles_done') && 'game--roles',
