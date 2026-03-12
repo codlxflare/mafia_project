@@ -178,7 +178,7 @@ export default function Game({
     socket?.emit('start_voting');
   };
 
-  const { tableSelectableIds, tableChosenId, tableOnSelect, tableSelectionHint } = (() => {
+  function getTableSelection() {
     if (phase === 'night' && nightTurn && !isDead && nightChoiceAllowed) {
       if (nightTurn.step === 'mafia') {
         const ids = aliveIds.filter((id) => id !== playerId);
@@ -231,7 +231,9 @@ export default function Game({
       };
     }
     return { tableSelectableIds: [], tableChosenId: null, tableOnSelect: null, tableSelectionHint: null };
-  })();
+  }
+
+  const { tableSelectableIds, tableChosenId, tableOnSelect, tableSelectionHint } = getTableSelection();
 
   useEffect(() => {
     if (!socket) return;
