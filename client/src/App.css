@@ -20,6 +20,7 @@
 
 .screen {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: clamp(var(--space-md), 4vw, var(--space-xl));
   padding-bottom: clamp(var(--space-xl), 6vw, 40px);
   display: flex;
@@ -34,6 +35,24 @@
 .screen .screen-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 @media (max-width: 380px) {
   .screen { padding-left: var(--space-md); padding-right: var(--space-md); }
+}
+
+/* Mobile: compact layout so main actions fit without scroll */
+@media (max-height: 640px), (max-width: 480px) {
+  .screen { gap: var(--space-md); padding-bottom: var(--space-lg); }
+  .home .hero {
+    padding: var(--space-md) 0 var(--space-sm);
+  }
+  .home .hero h1 { font-size: 1.6rem; }
+  .home .tagline { font-size: var(--text-caption); }
+  .home .actions {
+    margin-top: var(--space-lg);
+    padding-top: 0;
+  }
+  .home h2 { font-size: var(--text-h3); margin-bottom: var(--space-xs); }
+  .home .hint { margin-bottom: var(--space-xs); }
+  .home-form { gap: var(--space-sm); }
+  .home .btn.link { margin-top: var(--space-sm); min-height: 44px; }
 }
 
 /* Home — чёткий вход без лишнего декора */
@@ -101,20 +120,43 @@
   font-weight: 400;
   margin-top: 8px;
 }
+.home-error {
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(220, 74, 92, 0.15);
+  border-radius: var(--radius);
+  font-size: var(--text-caption);
+  color: var(--accent);
+}
+.btn-copy-code {
+  margin-top: var(--space-md);
+  width: auto;
+  min-width: 140px;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-caption);
+}
+.btn-copy-code:disabled, .lobby .room-code .btn-copy-code:disabled { opacity: 0.7; }
 
 .btn {
   padding: 16px 24px;
   font-size: 1rem;
   width: 100%;
+  min-height: 44px;
+  touch-action: manipulation;
 }
 .btn.primary {
   background: var(--accent);
   color: #fff;
   box-shadow: var(--shadow-soft);
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s;
 }
 .btn.primary:hover:not(:disabled) {
   background: var(--accent-dim);
   box-shadow: 0 6px 20px rgba(220, 74, 92, 0.25);
+}
+.btn.primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
 .btn.secondary {
   background: var(--surface);
@@ -128,6 +170,14 @@
 }
 .btn.secondary:active:not(:disabled) {
   opacity: 0.9;
+}
+.btn.secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(255, 255, 255, 0.25);
+}
+.btn.link:focus-visible {
+  outline: none;
+  text-decoration: underline;
 }
 .btn.secondary.small {
   padding: 10px 16px;
@@ -164,6 +214,11 @@
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: 0.22em;
+}
+.room-code-invite {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--text-caption);
+  color: var(--muted);
 }
 .lobby .players ul {
   list-style: none;
@@ -430,6 +485,7 @@
 }
 .game-result--enter {
   animation: resultEnter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: var(--shadow-strong), 0 0 48px rgba(0, 0, 0, 0.25), 0 0 80px rgba(220, 74, 92, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .game-result--enter .result-title {
   animation: resultTitle 0.5s ease 0.15s both;
@@ -469,7 +525,14 @@
 .game-result .result-subtitle {
   color: var(--muted);
   font-size: 1rem;
-  margin: 0 0 20px;
+  margin: 0 0 16px;
+}
+.game-result-scroll {
+  max-height: min(50vh, 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 16px;
 }
 .game-result-mafia .result-title { color: #e94560; }
 .game-result-civilians .result-title { color: #0f9d58; }
@@ -705,6 +768,7 @@
 }
 .role-card.role-card--reveal {
   animation: cardIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: var(--shadow-soft), 0 24px 48px rgba(0, 0, 0, 0.35), 0 0 60px rgba(120, 80, 180, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .role-card.role-card--reveal .role-card-name {
   text-shadow: 0 0 30px currentColor;
@@ -952,6 +1016,22 @@
 .discussion-reaction-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   transform: scale(1.05);
+}
+@media (max-width: 480px) {
+  .discussion-reaction-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+    touch-action: manipulation;
+  }
+  .host-lines { max-height: 150px; }
+  .host-lines.big { max-height: 180px; }
+  .game-header { gap: 8px; flex-wrap: wrap; }
+  .role-badge, .phase-badge { padding: 6px 12px; font-size: 0.8rem; min-height: 44px; display: inline-flex; align-items: center; }
+  .game-settings summary { min-height: 44px; display: flex; align-items: center; padding: var(--space-xs) 0; }
+  .game-table-seat-inner { min-width: 44px; min-height: 44px; }
+  .game-table-seat-votes-num { font-size: 1rem; }
+  .game-table-seat-votes { min-width: 2.2em; padding: 3px 6px; }
 }
 .discussion-feed {
   display: flex;
@@ -1688,6 +1768,19 @@
   background: linear-gradient(180deg, rgba(233, 69, 96, 0.2) 0%, rgba(233, 69, 96, 0.08) 100%);
   box-shadow: 0 0 0 1px rgba(233, 69, 96, 0.2), 0 4px 16px rgba(233, 69, 96, 0.15);
 }
+@media (max-width: 480px) {
+  .lobby .room-code { padding: var(--space-md) var(--space-lg); }
+  .lobby .room-code .code { font-size: 1.65rem; letter-spacing: 0.18em; }
+  .lobby-avatar-btn { width: 44px; height: 44px; font-size: 1.5rem; touch-action: manipulation; }
+  .players--cards .players-table-preview { max-height: 160px; }
+  .player-card-preview { padding: var(--space-sm) var(--space-md); }
+  .lobby-settings { padding: var(--space-md); }
+  .lobby-settings label { margin-bottom: var(--space-sm); }
+  .lobby-mode-hint { font-size: 0.75rem; margin-bottom: var(--space-xs); }
+  .lobby .need { margin-bottom: var(--space-xs); }
+  .lobby .btn.start { margin-top: var(--space-sm); }
+  .tts-toggle { padding: var(--space-sm) 0; min-height: 44px; align-items: center; }
+}
 .players--cards h3 {
   margin-bottom: 12px;
 }
@@ -1732,4 +1825,37 @@
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.02em;
+}
+
+/* Accessibility: respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .night-choice--enter,
+  .vote-block--enter,
+  .night-wait--enter,
+  .night-wait.night-wait--enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .role-card.role-card--reveal,
+  .role-card.role-card--reveal .role-card-label,
+  .role-card.role-card--reveal .role-card-name,
+  .role-card.role-card--reveal .role-card-desc,
+  .role-card.role-card--reveal .btn {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .game-result--enter,
+  .game-result--enter .result-title,
+  .game-result--enter .result-subtitle,
+  .game-result--enter .roles-reveal {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .game .host-speaker,
+  .you-dead.you-dead--pulse {
+    animation: none;
+  }
 }

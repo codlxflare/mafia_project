@@ -1,6 +1,6 @@
 import { AVATAR_IDS, getAvatarEmoji } from '../avatars';
 
-export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost }) {
+export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost, onCopyCode, copyToast, startingGame }) {
   const playerIds = room?.playerIds || [];
   const playerNames = room?.playerNames || {};
   const playerAvatars = room?.playerAvatars || {};
@@ -16,6 +16,12 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
       <div className="room-code">
         <span className="label">Код комнаты</span>
         <span className="code">{roomCode}</span>
+        {onCopyCode && (
+          <button type="button" className="btn btn-copy-code" onClick={onCopyCode} aria-label="Скопировать код">
+            {copyToast ? 'Скопировано' : 'Скопировать'}
+          </button>
+        )}
+        {count < 4 && <p className="room-code-invite">Пригласите друзей по коду</p>}
       </div>
 
       <div className="lobby-avatar-pick">
@@ -91,8 +97,8 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
       </p>
       {!canStart && <p className="need">Нужно минимум 4 человека</p>}
       {isCreator && canStart && (
-        <button className="btn primary start" onClick={onStartGame}>
-          Начать игру
+        <button className="btn primary start" onClick={onStartGame} disabled={startingGame}>
+          {startingGame ? 'Запуск…' : 'Начать игру'}
         </button>
       )}
 

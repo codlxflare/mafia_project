@@ -306,45 +306,47 @@ export default function Game({
                 ? 'Город пал. Мафия взяла верх.'
                 : 'Город спасён. Мафия разоблачена.'}
             </p>
-            <div className="roles-reveal">
-              <h4>Расклад по ролям</h4>
-              <ul className="roles-reveal-list">
-                {(room?.playerIds || []).map((id) => (
-                  <li key={id} className="roles-reveal-item">
-                    <span className="roles-reveal-name">{gameResult.playerNames?.[id] || id}</span>
-                    <span className={`roles-reveal-role role-${gameResult.roles?.[id] || ''}`}>
-                      {ROLE_NAMES[gameResult.roles?.[id]] || gameResult.roles?.[id] || '—'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            <div className="game-result-scroll">
+              <div className="roles-reveal">
+                <h4>Расклад по ролям</h4>
+                <ul className="roles-reveal-list">
+                  {(room?.playerIds || []).map((id) => (
+                    <li key={id} className="roles-reveal-item">
+                      <span className="roles-reveal-name">{gameResult.playerNames?.[id] || id}</span>
+                      <span className={`roles-reveal-role role-${gameResult.roles?.[id] || ''}`}>
+                        {ROLE_NAMES[gameResult.roles?.[id]] || gameResult.roles?.[id] || '—'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {gameResult.voteHistory?.length > 0 && (
+                <div className="vote-reveal">
+                  <h4>Кто за кого голосовал</h4>
+                  <ul className="vote-reveal-list">
+                    {gameResult.voteHistory.map((v, i) => (
+                      <li key={i}>
+                        {v.tie ? `Раунд ${v.round}: ничья` : `Раунд ${v.round}: исключён ${v.excludedName}. Голоса: ${v.votes ? Object.entries(v.votes).map(([who, target]) => `${who} → ${target}`).join(', ') : '—'}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {gameResult.battleLog?.length > 0 && (
+                <div className="battle-log">
+                  <h4>Ход игры</h4>
+                  <ul className="battle-log-list">
+                    {gameResult.battleLog.map((e, i) => (
+                      <li key={i}>
+                        {e.type === 'night_end' && `Ночь ${e.round}: ${e.killed ? `погиб ${e.killed}` : 'никто не погиб'}`}
+                        {e.type === 'vote_tie' && `День ${e.round}: ничья`}
+                        {e.type === 'vote_excluded' && `День ${e.round}: исключён ${e.excludedName}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-            {gameResult.voteHistory?.length > 0 && (
-              <div className="vote-reveal">
-                <h4>Кто за кого голосовал</h4>
-                <ul className="vote-reveal-list">
-                  {gameResult.voteHistory.map((v, i) => (
-                    <li key={i}>
-                      {v.tie ? `Раунд ${v.round}: ничья` : `Раунд ${v.round}: исключён ${v.excludedName}. Голоса: ${v.votes ? Object.entries(v.votes).map(([who, target]) => `${who} → ${target}`).join(', ') : '—'}`}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {gameResult.battleLog?.length > 0 && (
-              <div className="battle-log">
-                <h4>Ход игры</h4>
-                <ul className="battle-log-list">
-                  {gameResult.battleLog.map((e, i) => (
-                    <li key={i}>
-                      {e.type === 'night_end' && `Ночь ${e.round}: ${e.killed ? `погиб ${e.killed}` : 'никто не погиб'}`}
-                      {e.type === 'vote_tie' && `День ${e.round}: ничья`}
-                      {e.type === 'vote_excluded' && `День ${e.round}: исключён ${e.excludedName}`}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             {isCreator && (
               <button type="button" className="btn primary" onClick={() => socket?.emit('play_again')}>
                 Играем ещё
@@ -402,7 +404,7 @@ export default function Game({
       {showNightWait && (
         <div className="night-wait night-wait--enter">
           <p className="night-wait-text">Ждите своей очереди.</p>
-          <p className="night-wait-hint">Ведущий объявляет. Кнопки выбора появятся, когда настанет ваш ход.</p>
+          <p className="night-wait-hint">Кнопки появятся на вашем ходе.</p>
         </div>
       )}
       {phase === 'night' && nightTurn?.step === 'mafia' && !isDead && nightChoiceAllowed && (

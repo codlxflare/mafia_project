@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Home({ onCreateRoom, onJoinRoom }) {
+export default function Home({ onCreateRoom, onJoinRoom, homeError, creatingRoom, joiningRoom }) {
   const [mode, setMode] = useState(null); // 'create' | 'join'
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -38,13 +38,18 @@ export default function Home({ onCreateRoom, onJoinRoom }) {
             onChange={(e) => setCreateName(e.target.value)}
             maxLength={20}
           />
+          {homeError && <p className="home-error" role="alert">{homeError}</p>}
           <button
             className="btn primary"
-            onClick={() => onCreateRoom(createName.trim() || 'Ведущий')}
+            onClick={() => {
+              document.activeElement?.blur?.();
+              onCreateRoom(createName.trim() || 'Ведущий');
+            }}
+            disabled={creatingRoom}
           >
-            Создать
+            {creatingRoom ? 'Подключение…' : 'Создать'}
           </button>
-          <button className="btn link" onClick={() => setMode(null)}>
+          <button className="btn link" onClick={() => setMode(null)} disabled={creatingRoom}>
             Назад
           </button>
         </div>
@@ -72,13 +77,18 @@ export default function Home({ onCreateRoom, onJoinRoom }) {
           onChange={(e) => setJoinName(e.target.value)}
           maxLength={20}
         />
+        {homeError && <p className="home-error" role="alert">{homeError}</p>}
         <button
           className="btn primary"
-          onClick={() => onJoinRoom(joinCode, joinName.trim() || 'Игрок')}
+          onClick={() => {
+            document.activeElement?.blur?.();
+            onJoinRoom(joinCode, joinName.trim() || 'Игрок');
+          }}
+          disabled={joiningRoom}
         >
-          Войти
+          {joiningRoom ? 'Вход…' : 'Войти'}
         </button>
-        <button className="btn link" onClick={() => setMode(null)}>
+        <button className="btn link" onClick={() => setMode(null)} disabled={joiningRoom}>
           Назад
         </button>
       </div>

@@ -6,7 +6,7 @@
   --accent: #dc4a5c;
   --accent-dim: #b83d4d;
   --text: #e8e8ec;
-  --muted: #8e92a8;
+  --muted: #9a9eb2;
   --success: #0f9d58;
   --danger: #dc4a5c;
   /* Форма и тени */
@@ -39,6 +39,7 @@
 html, body, #root {
   margin: 0;
   min-height: 100%;
+  min-height: 100dvh;
   font-family: var(--font);
   font-size: var(--text-body);
   background: var(--bg);
@@ -88,4 +89,9 @@ input::placeholder {
 input:focus {
   outline: none;
   border-color: var(--accent);
+}
+input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(220, 74, 92, 0.25);
 }

@@ -53,6 +53,11 @@ export default function App() {
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [keyCheck, setKeyCheck] = useState(null);
   const [connected, setConnected] = useState(true);
+  const [homeError, setHomeError] = useState(null);
+  const [creatingRoom, setCreatingRoom] = useState(false);
+  const [joiningRoom, setJoiningRoom] = useState(false);
+  const [startingGame, setStartingGame] = useState(false);
+  const [copyToast, setCopyToast] = useState(false);
   const speakHostRef = useRef(false);
   const soundEffectsRef = useRef(true);
   const isCreatorRef = useRef(false);
@@ -205,14 +210,29 @@ export default function App() {
       onEnableTts();
       document.removeEventListener('click', handleFirstInteraction);
       document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('pointerdown', handleFirstInteraction);
     };
     document.addEventListener('click', handleFirstInteraction, { passive: true });
     document.addEventListener('touchstart', handleFirstInteraction, { passive: true });
+    document.addEventListener('pointerdown', handleFirstInteraction, { passive: true });
     return () => {
       document.removeEventListener('click', handleFirstInteraction);
       document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('pointerdown', handleFirstInteraction);
     };
   }, [onEnableTts]);
+
+  useEffect(() => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   const playHostText = useCallback((text, isUserGesture = false) => {
     if (!text || typeof window === 'undefined') return;
@@ -288,6 +308,7 @@ export default function App() {
     socket.on('room_updated', setRoom);
     socket.on('game_started', (data) => {
       log('game_started');
+      setStartingGame(false);
       setScreen('game');
       setRoundIndex(data?.roundIndex ?? 1);
       setNightStep(null);
@@ -375,10 +396,17 @@ export default function App() {
   }, [socket, addHostLine, playPhaseSound]);
 
   const createRoom = (name) => {
-    if (!socket) return;
+    if (!socket || creatingRoom) return;
+    setHomeError(null);
+    setCreatingRoom(true);
     setPlayerName(name || 'Ведущий');
     setIsCreator(true);
     socket.emit('create_room', name || 'Ведущий', (res) => {
+      setCreatingRoom(false);
+      if (res?.error) {
+        setHomeError(res.error);
+        return;
+      }
       setRoomCode(res.code);
       setPlayerId(res.playerId);
       setScreen('lobby');
@@ -386,13 +414,16 @@ export default function App() {
   };
 
   const joinRoom = (code, name) => {
-    if (!socket) return;
+    if (!socket || joiningRoom) return;
     const trimmedCode = String(code).trim();
     const displayName = name?.trim() || 'Игрок';
+    setHomeError(null);
+    setJoiningRoom(true);
     setPlayerName(displayName);
     socket.emit('join_room', { code: trimmedCode, playerName: displayName }, (res) => {
-      if (res.error) {
-        alert(res.error);
+      setJoiningRoom(false);
+      if (res?.error) {
+        setHomeError(res.error);
         return;
       }
       setRoomCode(trimmedCode);
@@ -402,18 +433,34 @@ export default function App() {
   };
 
   const startGame = () => {
+    if (startingGame) return;
+    setStartingGame(true);
     socket?.emit('start_game');
   };
+
+  const copyRoomCode = useCallback(() => {
+    if (!roomCode) return;
+    navigator.clipboard?.writeText(roomCode).then(() => {
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2000);
+    });
+  }, [roomCode]);
 
   if (screen === 'home') {
     return (
       <>
         {!connected && (
           <div className="connection-overlay" role="alert">
-            <p>Нет связи. Переподключитесь или обновите страницу и войдите по коду комнаты.</p>
+            <p>Нет связи. Переподключение…</p>
           </div>
         )}
-        <Home onCreateRoom={createRoom} onJoinRoom={joinRoom} />
+        <Home
+          onCreateRoom={createRoom}
+          onJoinRoom={joinRoom}
+          homeError={homeError}
+          creatingRoom={creatingRoom}
+          joiningRoom={joiningRoom}
+        />
       </>
     );
   }
@@ -426,20 +473,23 @@ export default function App() {
       <>
         {!connected && (
           <div className="connection-overlay" role="alert">
-            <p>Нет связи. Переподключитесь или обновите страницу и войдите по коду комнаты.</p>
+            <p>Нет связи. Переподключение…</p>
           </div>
         )}
         <Lobby
-        roomCode={roomCode}
-        room={room}
-        playerId={playerId}
-        onSetAvatar={(id) => socket?.emit('set_avatar', id)}
-        isCreator={isCreator}
-        onStartGame={startGame}
-        onRoomSettings={setRoomSettings}
-        speakHost={speakHost}
-        setSpeakHost={setSpeakHost}
-      />
+          roomCode={roomCode}
+          room={room}
+          playerId={playerId}
+          onSetAvatar={(id) => socket?.emit('set_avatar', id)}
+          isCreator={isCreator}
+          onStartGame={startGame}
+          onRoomSettings={setRoomSettings}
+          speakHost={speakHost}
+          setSpeakHost={setSpeakHost}
+          onCopyCode={copyRoomCode}
+          copyToast={copyToast}
+          startingGame={startingGame}
+        />
       </>
     );
   }
@@ -447,7 +497,7 @@ export default function App() {
     <>
       {!connected && (
         <div className="connection-overlay" role="alert">
-          <p>Нет связи. Переподключитесь или обновите страницу и войдите по коду комнаты.</p>
+          <p>Нет связи. Переподключение…</p>
         </div>
       )}
       <Game
