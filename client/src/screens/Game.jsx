@@ -72,7 +72,7 @@ export default function Game({
   useEffect(() => { setRoleCardDismissed(false); }, [role]);
   useEffect(() => {
     if (phase !== 'roles' && phase !== 'roles_done') return;
-    const t = setTimeout(() => setIntroCutsceneDone(true), 4200);
+    const t = setTimeout(() => setIntroCutsceneDone(true), 5200);
     return () => clearTimeout(t);
   }, [phase]);
   useEffect(() => { if (phase !== 'night') setMyChoice(null); setDetectiveAction(null); setMafiaRevoteSec(null); }, [phase]);
@@ -661,7 +661,11 @@ function GameTable({
             const seatProps = selectable
               ? {
                   type: 'button',
-                  onClick: () => onSelectPlayer(id, playerNames[id] || id),
+                  onClick: (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectPlayer(id, playerNames[id] || id);
+                  },
                   'aria-label': `Выбрать ${playerNames[id] || id}`,
                 }
               : {};

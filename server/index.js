@@ -126,9 +126,9 @@ const NIGHT_WAIT_MS = readDelay('MAFIA_NIGHT_WAIT_MS', 90000);
 const NIGHT_NUDGE_MS = readDelay('MAFIA_NIGHT_NUDGE_MS', 20000);
 /** Скорость озвучки: символов в секунду (русский TTS ~10–12). */
 const SPEECH_CHARS_PER_SEC = readDelay('MAFIA_SPEECH_CHARS_PER_SEC', 10);
-const SPEECH_BUFFER_MS = readDelay('MAFIA_SPEECH_BUFFER_MS', 600);
-const SPEECH_MIN_MS = readDelay('MAFIA_SPEECH_MIN_MS', 1800);
-const SPEECH_MAX_MS = readDelay('MAFIA_SPEECH_MAX_MS', 14000);
+const SPEECH_BUFFER_MS = readDelay('MAFIA_SPEECH_BUFFER_MS', 800);
+const SPEECH_MIN_MS = readDelay('MAFIA_SPEECH_MIN_MS', 2200);
+const SPEECH_MAX_MS = readDelay('MAFIA_SPEECH_MAX_MS', 16000);
 
 /** Длительность паузы после реплики (мс), чтобы TTS успел озвучить текст. */
 function speechDurationMs(text) {
@@ -139,9 +139,9 @@ function speechDurationMs(text) {
 }
 
 /** Доп. пауза после «проснитесь», чтобы ведущий успел объявить перед показом выбора (только у создателя TTS). */
-const DELAY_AFTER_WAKE_BEFORE_TURN_MS = readDelay('MAFIA_DELAY_AFTER_WAKE_BEFORE_TURN_MS', 1200);
+const DELAY_AFTER_WAKE_BEFORE_TURN_MS = readDelay('MAFIA_DELAY_AFTER_WAKE_BEFORE_TURN_MS', 1600);
 /** Пауза после выбора перед «засыпайте» (отклик после клика). */
-const DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS = readDelay('MAFIA_DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS', 150);
+const DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS = readDelay('MAFIA_DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS', 600);
 /** Макс. ожидание после короткой фразы «засыпайте» перед следующим шагом. */
 const TRANSITION_PHRASE_MAX_MS = readDelay('MAFIA_TRANSITION_PHRASE_MAX_MS', 1400);
 
@@ -710,7 +710,8 @@ io.on('connection', (socket) => {
     io.to(code).emit('host_says', startLine);
     await delay(speechDurationMs(startLine));
     room.playerIds.forEach((id) => io.to(id).emit('your_role', roles[id]));
-    await delay(2000);
+    const DELAY_AFTER_ROLES_REVEAL_MS = readDelay('MAFIA_DELAY_AFTER_ROLES_REVEAL_MS', 5500);
+    await delay(DELAY_AFTER_ROLES_REVEAL_MS);
     const roleCounts = {};
     Object.values(roles).forEach((r) => { roleCounts[r] = (roleCounts[r] || 0) + 1; });
     const rolesDoneLine = await getHostLine('roles_done', {
@@ -721,6 +722,8 @@ io.on('connection', (socket) => {
     io.to(code).emit('host_says', rolesDoneLine);
     io.to(code).emit('phase', 'roles_done');
     await delay(speechDurationMs(rolesDoneLine));
+    const DELAY_AFTER_ROLES_DONE_BEFORE_NIGHT_MS = readDelay('MAFIA_DELAY_AFTER_ROLES_DONE_BEFORE_NIGHT_MS', 1800);
+    await delay(DELAY_AFTER_ROLES_DONE_BEFORE_NIGHT_MS);
     log('Server', 'start_game -> phase night, running runNightSequence');
     room.phase = 'night';
     io.to(code).emit('phase', 'night');
@@ -763,6 +766,10 @@ io.on('connection', (socket) => {
         room.gameState.nightChoices.detectiveCheckId = id;
         room.gameState.nightChoices.commissionerShotId = undefined;
         log('Server', 'night_choice SET detective checkId=', id);
+        io.to(socket.id).emit('detective_result', {
+          targetId: id,
+          isMafia: isMafiaForDetective(room.gameState.roles[id]),
+        });
       }
     }
     if (payload.shootId !== undefined && role === ROLES.detective) {
@@ -876,12 +883,21 @@ io.on('connection', (socket) => {
     socket.emit('vote_received');
     const canVoteBase = favorites ? alive.filter((id) => !favorites.includes(id)) : alive;
     const canVote = canVoteBase.filter((id) => isConnected(room, id));
+    // Текущие промежуточные счётчики голосов — для отображения над игроками.
+    const currentCounts = {};
+    Object.entries(room.votes || {}).forEach(([voterId, target]) => {
+      if (canVote.includes(voterId) && alive.includes(target)) {
+        currentCounts[target] = (currentCounts[target] || 0) + 1;
+      }
+    });
+    const code = socket.data.roomCode;
+    io.to(code).emit('vote_counts', { counts: { ...currentCounts } });
+
     const voted = Object.keys(room.votes).filter((id) => canVote.includes(id));
     if (voted.length !== canVote.length) return;
     if (room.voteCountingStarted) return;
     room.voteCountingStarted = true;
 
-    const code = socket.data.roomCode;
     const countingLine = await getHostLine('vote_counting', { voiceStyle: room.hostVoiceStyle });
     io.to(code).emit('host_says', countingLine);
     await delay(speechDurationMs(countingLine));
@@ -942,8 +958,9 @@ io.on('connection', (socket) => {
     if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId, tie: false });
     if (r.battleLog) r.battleLog.push({ type: 'vote_excluded', round: r.gameState.roundIndex ?? 1, excludedName });
     io.to(code).emit('room_updated', roomForClient(r));
-    io.to(code).emit('player_excluded', { playerId: excludedId, excludedName, lastWordsSec: 20 });
-    await delay(20000);
+    const LAST_WORDS_MS = readDelay('MAFIA_LAST_WORDS_MS', 20000);
+    io.to(code).emit('player_excluded', { playerId: excludedId, excludedName, lastWordsSec: Math.round(LAST_WORDS_MS / 1000) });
+    await delay(LAST_WORDS_MS);
     const voteLine = await getHostLine('vote_result_summary', {
       excludedName,
       excludedRole: excludedRole ? ROLE_NAMES_RU[excludedRole] || excludedRole : null,

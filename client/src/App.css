@@ -1372,7 +1372,7 @@
   /* Центр карточки в (50%,50%): сдвиг на -50% своей ширины/высоты, затем вращение и сдвиг по радиусу */
   transform: translate(-50%, -50%) rotate(var(--angle)) translateY(calc(-1 * var(--seat-radius-px, 0px))) rotate(calc(-1 * var(--angle)));
   transform-origin: center center;
-  transition: transform 0.25s ease, filter 0.35s ease, opacity 0.35s ease;
+  transition: filter 0.35s ease, opacity 0.35s ease;
 }
 .game-table-seat:hover .game-table-seat-inner {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
