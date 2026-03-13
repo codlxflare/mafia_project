@@ -1,6 +1,6 @@
 import { AVATAR_IDS, getAvatarEmoji } from '../avatars';
 
-export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost, audioUnlocked, onEnableTts, onTestVoice, ttsError, setTtsError, keyCheck, onCheckKey }) {
+export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost }) {
   const playerIds = room?.playerIds || [];
   const playerNames = room?.playerNames || {};
   const playerAvatars = room?.playerAvatars || {};
@@ -86,7 +86,9 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
         </div>
       )}
 
-      <p className="lobby-mode-hint">Режим игры: состав ролей по числу игроков (5–12). 5 — мафия, доктор, детектив, мирные; 6 — мафия, дон, доктор, детектив, мирные; 7 — две мафии, доктор, детектив, мирные; 8+ — две мафии, дон, доктор, детектив, ветеран, мирные.</p>
+      <p className="lobby-mode-hint" title="5: мафия, доктор, детектив, 2 мирных. 6: + дон. 7: 2 мафии, доктор, детектив, 3 мирных. 8+: + ветеран, остальные мирные.">
+        5–12 игроков. Роли: мафия, дон (6+), доктор, детектив, ветеран (8+), мирные.
+      </p>
       {!canStart && <p className="need">Нужно минимум 4 человека</p>}
       {isCreator && canStart && (
         <button className="btn primary start" onClick={onStartGame}>
@@ -95,50 +97,14 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
       )}
 
       {isCreator && (
-        <>
-          <div className="key-check-row">
-            <button type="button" className="btn secondary" onClick={onCheckKey} disabled={keyCheck?.checking}>
-              {keyCheck?.checking ? 'Проверка…' : 'Проверить ключ TTS'}
-            </button>
-            {keyCheck && !keyCheck.checking && (
-              keyCheck.ok
-                ? <span className="key-check-ok">Ключ рабочий</span>
-                : <span className="key-check-err">{keyCheck.error}</span>
-            )}
-          </div>
-          <label className="tts-toggle">
-            <input
-              type="checkbox"
-              checked={speakHost}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setSpeakHost(checked);
-                if (checked && audioUnlocked && onTestVoice) setTimeout(() => onTestVoice(), 0);
-              }}
-            />
-            <span>Озвучивать ведущего (ИИ-голос, колонка)</span>
-          </label>
-          {speakHost && !audioUnlocked && (
-            <div className="tts-enable-overlay">
-              <p>Чтобы слышать ведущего в колонку, нажмите один раз:</p>
-              <button type="button" className="btn primary" onClick={onEnableTts}>Включить озвучку</button>
-            </div>
-          )}
-          {speakHost && audioUnlocked && (
-            <>
-              <button type="button" className="btn secondary" onClick={onTestVoice}>
-                Проверить озвучку
-              </button>
-              {ttsError && (
-                <p className="tts-error">
-                  {ttsError}
-                  <button type="button" className="btn-link-inline" onClick={onEnableTts}>Включить озвучку</button>
-                  <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}>скрыть</button>
-                </p>
-              )}
-            </>
-          )}
-        </>
+        <label className="tts-toggle">
+          <input
+            type="checkbox"
+            checked={speakHost}
+            onChange={(e) => setSpeakHost(e.target.checked)}
+          />
+          <span>Озвучивать ведущего (ИИ-голос, колонка)</span>
+        </label>
       )}
     </div>
   );

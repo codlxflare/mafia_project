@@ -64,6 +64,7 @@ export default function App() {
   const ttsBlockedRef = useRef(false);
   const audioContextRef = useRef(null);
   const nightSyncRequestedRef = useRef(false);
+  const audioUnlockHandledRef = useRef(false);
   useEffect(() => { speakHostRef.current = speakHost; }, [speakHost]);
   useEffect(() => { soundEffectsRef.current = soundEffects; }, [soundEffects]);
   useEffect(() => { isCreatorRef.current = isCreator; }, [isCreator]);
@@ -195,6 +196,23 @@ export default function App() {
     setTtsError(null);
     processTtsQueue();
   }, [unlockAudio, processTtsQueue]);
+
+  useEffect(() => {
+    if (audioUnlockHandledRef.current) return;
+    const handleFirstInteraction = () => {
+      if (audioUnlockHandledRef.current) return;
+      audioUnlockHandledRef.current = true;
+      onEnableTts();
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+    };
+    document.addEventListener('click', handleFirstInteraction, { passive: true });
+    document.addEventListener('touchstart', handleFirstInteraction, { passive: true });
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, [onEnableTts]);
 
   const playHostText = useCallback((text, isUserGesture = false) => {
     if (!text || typeof window === 'undefined') return;
@@ -421,13 +439,6 @@ export default function App() {
         onRoomSettings={setRoomSettings}
         speakHost={speakHost}
         setSpeakHost={setSpeakHost}
-        audioUnlocked={audioUnlocked}
-        onEnableTts={onEnableTts}
-        onTestVoice={testVoice}
-        ttsError={ttsError}
-        setTtsError={setTtsError}
-        keyCheck={keyCheck}
-        onCheckKey={checkKey}
       />
       </>
     );

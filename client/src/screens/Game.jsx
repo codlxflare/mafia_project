@@ -186,7 +186,7 @@ export default function Game({
           tableSelectableIds: ids,
           tableChosenId: myChoice?.id ?? null,
           tableOnSelect: (id, name) => sendNightChoice({ victimId: id }, name),
-          tableSelectionHint: 'Кликните по аватару за столом — кого убить',
+          tableSelectionHint: 'Клик по аватару — выбор жертвы',
         };
       }
       if (nightTurn.step === 'don_decides') {
@@ -195,7 +195,7 @@ export default function Game({
           tableSelectableIds: ids,
           tableChosenId: myChoice?.id != null && myChoice?.id !== 'nobody' ? myChoice.id : null,
           tableOnSelect: (id, name) => sendNightChoice({ victimId: id }, name),
-          tableSelectionHint: 'Дон решает при ничьей. Кого убираем? Или нажмите «Никого».',
+          tableSelectionHint: 'Дон решает при ничьей. Кого убираем?',
         };
       }
       if (nightTurn.step === 'doctor') {
@@ -206,7 +206,7 @@ export default function Game({
           tableSelectableIds: ids,
           tableChosenId: myChoice?.id ?? null,
           tableOnSelect: (id, name) => sendNightChoice({ savedId: id }, name),
-          tableSelectionHint: 'Кого спасти? Кликните по аватару за столом',
+          tableSelectionHint: 'Клик по аватару — кого спасти',
         };
       }
       if (nightTurn.step === 'detective' && detectiveAction != null) {
@@ -218,7 +218,7 @@ export default function Game({
             detectiveAction === 'check'
               ? sendNightChoice({ checkId: id }, name)
               : sendNightChoice({ shootId: id }, name),
-          tableSelectionHint: detectiveAction === 'check' ? 'Кого проверить? Кликните по аватару' : 'В кого стреляете? Кликните по аватару',
+          tableSelectionHint: detectiveAction === 'check' ? 'Клик по аватару — проверить' : 'Клик по аватару — выстрел',
         };
       }
     }
@@ -227,7 +227,7 @@ export default function Game({
         tableSelectableIds: votingCandidates,
         tableChosenId: myVote?.id ?? null,
         tableOnSelect: (id, name) => sendVote(id, name),
-        tableSelectionHint: 'Голосование: кликните по аватару за столом',
+        tableSelectionHint: 'Клик по аватару — ваш голос',
       };
     }
     return { tableSelectableIds: [], tableChosenId: null, tableOnSelect: null, tableSelectionHint: null };
@@ -362,28 +362,22 @@ export default function Game({
               <input
                 type="checkbox"
                 checked={speakHost}
-                onChange={(e) => {
-                  setSpeakHost(e.target.checked);
-                  if (e.target.checked && audioUnlocked && onTestVoice) setTimeout(onTestVoice, 0);
-                }}
+                onChange={(e) => setSpeakHost(e.target.checked)}
               />
               <span>Озвучивать ведущего</span>
             </label>
-            {speakHost && !audioUnlocked && (
-              <button type="button" className="btn primary small" onClick={onEnableTts}>Включить озвучку</button>
-            )}
             {typeof setSoundEffects === 'function' && (
               <label className="tts-toggle">
                 <input type="checkbox" checked={soundEffects} onChange={(e) => setSoundEffects(e.target.checked)} />
                 <span>Звуки фаз</span>
               </label>
             )}
-            <button type="button" className="btn secondary small" onClick={onTestVoice} disabled={!audioUnlocked}>Проверить</button>
-            <button type="button" className="btn secondary small" onClick={onCheckKey} disabled={keyCheck?.checking}>
-              {keyCheck?.checking ? '…' : 'Ключ'}
-            </button>
-            {keyCheck && !keyCheck.checking && (keyCheck.ok ? <span className="key-ok">✓</span> : <span className="key-err">{keyCheck.error}</span>)}
-            {ttsError && <p className="tts-error small">{ttsError} <button type="button" className="btn-link-inline" onClick={onEnableTts}>Включить озвучку</button> <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}>скрыть</button></p>}
+            {ttsError && (
+              <p className="tts-error small">
+                {ttsError}
+                <button type="button" className="btn-link-inline" onClick={() => setTtsError(null)}>скрыть</button>
+              </p>
+            )}
           </div>
         </details>
       )}
@@ -615,6 +609,7 @@ function GameTable({
     return `${n} голосов`;
   };
   const wrapRef = useRef(null);
+  const lastWidthRef = useRef(0);
   const [radiusPx, setRadiusPx] = useState(0);
   const n = Math.max(playerIds.length, 1);
   const radiusPct = Math.max(50, Math.min(56, 58 - n * 0.8));
@@ -624,8 +619,10 @@ function GameTable({
     if (!wrapRef.current) return;
     const el = wrapRef.current;
     const update = () => {
-      const size = Math.min(el.offsetWidth, el.offsetHeight) || 0;
-      setRadiusPx((radiusPct / 100) * (size / 2));
+      const width = el.offsetWidth || 0;
+      if (width === lastWidthRef.current) return;
+      lastWidthRef.current = width;
+      setRadiusPx((radiusPct / 100) * (width / 2));
     };
     update();
     const ro = new ResizeObserver(update);
@@ -645,7 +642,7 @@ function GameTable({
           <span className="game-table-center-phase">{phaseLabel}</span>
           {(roundIndex && phase !== 'ended') && <span className="game-table-center-round">{roundIndex}</span>}
         </div>
-        <div className="game-table-seats" style={{ '--seat-radius-px': `${radiusPx}px` }}>
+        <div className="game-table-seats">
           {playerIds.map((id, i) => {
             const isDead = dead.includes(id);
             const isExcluded = excludedForLastWords?.playerId === id;
@@ -656,7 +653,9 @@ function GameTable({
             const showDetectiveCheck = detectiveCheckPlayerId === id;
             const votesForSeat = voteCounts[id];
             const showVoteCount = votesForSeat != null && votesForSeat > 0;
-            const angle = (360 / n) * i - 90;
+            const angleRad = ((360 / n) * i - 90) * (Math.PI / 180);
+            const xPx = radiusPx * Math.cos(angleRad);
+            const yPx = -radiusPx * Math.sin(angleRad);
             const SeatWrapper = selectable ? 'button' : 'div';
             const seatProps = selectable
               ? {
@@ -673,7 +672,7 @@ function GameTable({
               <SeatWrapper
                 key={id}
                 className={`game-table-seat ${isDead ? 'game-table-seat--dead' : ''} ${isExcluded ? 'game-table-seat--excluded' : ''} ${isSpeaking ? 'game-table-seat--speaking' : ''} ${isYou ? 'game-table-seat--you' : ''} ${selectable ? 'game-table-seat--selectable' : ''} ${chosen ? 'game-table-seat--chosen' : ''}`}
-                style={{ '--angle': `${angle}deg` }}
+                style={{ transform: `translate(-50%, -50%) translate(${xPx}px, ${yPx}px)` }}
                 {...seatProps}
               >
                 <div className="game-table-seat-inner">

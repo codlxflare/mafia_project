@@ -27,7 +27,7 @@ describe('assignRoles', () => {
     assert.strictEqual(assignRoles(ids), null);
   });
 
-  it('при 5 игроках: 1 мафия, доктор, детектив, 2 мирных', () => {
+  it('при 5 игроках: 1 мафия-дон, доктор, детектив, 2 мирных', () => {
     const ids = ['a', 'b', 'c', 'd', 'e'];
     const roles = assignRoles(ids);
     assert(roles);
@@ -36,6 +36,8 @@ describe('assignRoles', () => {
     assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.don).length, 0);
+    assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 2);
+    assert.strictEqual(values.filter((r) => r === ROLES.lucky || r === ROLES.journalist).length, 0);
     assert.strictEqual(values.length, 5);
   });
 
@@ -48,7 +50,21 @@ describe('assignRoles', () => {
     assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 2);
     assert.strictEqual(values.length, 6);
+  });
+
+  it('при 7 игроках: 2 мафии, доктор, детектив, 3 мирных', () => {
+    const ids = Array.from({ length: 7 }, (_, i) => `p${i}`);
+    const roles = assignRoles(ids);
+    assert(roles);
+    const values = Object.values(roles);
+    assert.strictEqual(values.filter((r) => r === ROLES.mafia).length, 2);
+    assert.strictEqual(values.filter((r) => r === ROLES.don).length, 0);
+    assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 3);
+    assert.strictEqual(values.length, 7);
   });
 
   it('при 8 игроках: 2 мафии, дон, доктор, детектив, ветеран, 2 мирных', () => {
@@ -59,7 +75,40 @@ describe('assignRoles', () => {
     assert.strictEqual(values.filter((r) => r === ROLES.mafia).length, 2);
     assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.veteran).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 2);
     assert.strictEqual(values.length, 8);
+  });
+
+  it('при 9 игроках: 2 мафии, дон, доктор, детектив, ветеран, 3 мирных', () => {
+    const ids = Array.from({ length: 9 }, (_, i) => `p${i}`);
+    const roles = assignRoles(ids);
+    assert(roles);
+    const values = Object.values(roles);
+    assert.strictEqual(values.filter((r) => r === ROLES.mafia).length, 2);
+    assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.veteran).length, 1);
+    assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 3);
+    assert.strictEqual(values.length, 9);
+  });
+
+  it('при 10–12 игроках: 2 мафии, дон, доктор, детектив, ветеран, остальные мирные', () => {
+    for (const n of [10, 11, 12]) {
+      const ids = Array.from({ length: n }, (_, i) => `p${i}`);
+      const roles = assignRoles(ids);
+      assert(roles, `n=${n}`);
+      const values = Object.values(roles);
+      assert.strictEqual(values.filter((r) => r === ROLES.mafia).length, 2, `n=${n} mafia`);
+      assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1, `n=${n} don`);
+      assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1, `n=${n} doctor`);
+      assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1, `n=${n} detective`);
+      assert.strictEqual(values.filter((r) => r === ROLES.veteran).length, 1, `n=${n} veteran`);
+      const civilians = values.filter((r) => r === ROLES.civilian).length;
+      assert.strictEqual(civilians, n - 6, `n=${n} civilians`);
+      assert.strictEqual(values.filter((r) => r === ROLES.lucky || r === ROLES.journalist).length, 0, `n=${n} no lucky/journalist`);
+      assert.strictEqual(values.length, n, `n=${n} total`);
+    }
   });
 
   it('каждый игрок получает ровно одну роль', () => {
