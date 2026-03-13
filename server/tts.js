@@ -278,26 +278,26 @@ async function synthesizeElevenLabs(text, withoutProxy = false) {
 
 /**
  * Синтез речи. Возвращает буфер MP3.
- * options.type — тип реплики (night_summary, game_end_summary и т.д.) для эмоциональных тегов Eleven v3.
+ * В API передаётся только чистый текст (без эмоциональных тегов), чтобы теги не озвучивались.
  * При TTS_PROVIDER=elevenlabs при любой ошибке (сеть, 403, прокси) пробует OpenAI, если задан OPENAI_API_KEY.
  */
 export async function synthesizeSpeech(text, options = {}) {
   if (!text || typeof text !== 'string' || text.length > 4000) {
     throw new Error('Нужен текст до 4000 символов');
   }
-  const textForTts = applyEmotionTag(text, options.type);
+  const cleanText = text.trim();
   const provider = getProvider();
   if (provider === 'elevenlabs') {
     try {
       const workerUrl = (process.env.TTS_CF_WORKER_URL || '').trim();
-      if (workerUrl) return await synthesizeElevenLabsViaWorker(textForTts);
-      return await synthesizeElevenLabs(textForTts);
+      if (workerUrl) return await synthesizeElevenLabsViaWorker(cleanText);
+      return await synthesizeElevenLabs(cleanText);
     } catch (e) {
       if (process.env.OPENAI_API_KEY) {
         const hint = e?.isCloudflareBlock ? '403 (Cloudflare)' : (e?.message || 'недоступен');
         console.warn('[TTS] ElevenLabs', hint, '— пробуем OpenAI.');
         try {
-          const buf = await synthesizeOpenAI(text);
+          const buf = await synthesizeOpenAI(cleanText);
           console.warn('[TTS] OpenAI fallback: OK');
           return buf;
         } catch (openaiErr) {
@@ -308,7 +308,7 @@ export async function synthesizeSpeech(text, options = {}) {
       throw e;
     }
   }
-  return await synthesizeOpenAI(text);
+  return await synthesizeOpenAI(cleanText);
 }
 
 /** Является ли TTS настроенным (есть ключ для выбранного провайдера). */

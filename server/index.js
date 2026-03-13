@@ -477,9 +477,74 @@ async function runNightSequence(io, code) {
   const detectiveCheckedId = needDetective ? r.gameState.nightChoices.detectiveCheckId : null;
   r.gameState.detectiveChecked = detectiveCheckedId;
   r.gameState.nightChoices = {};
-  r.phase = 'day';
   victimIds.forEach((id) => r.gameState.dead.add(id));
 
+  const win = checkWin(r.gameState);
+  if (win) {
+    r.phase = 'ended';
+    const avatars = r.playerAvatars || {};
+    const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист', veteran: 'ветеран' };
+    const victims = victimIds.map((id) => ({
+      name: r.playerNames[id],
+      role: r.gameState.roles[id],
+      roleName: ROLE_NAMES_RU[r.gameState.roles[id]] || r.gameState.roles[id],
+      avatarId: avatars[id],
+    }));
+    const nightSummaryData = {
+      round: r.gameState.roundIndex ?? 1,
+      victimCount: victims.length,
+      victims,
+      savedByName: savedId ? r.playerNames[savedId] : null,
+      savedAvatarId: savedId ? avatars[savedId] : null,
+      veteranSavedHimself: veteranProtectTonight,
+      detectiveCheckedName: detectiveCheckedId != null ? r.playerNames[detectiveCheckedId] : null,
+      detectiveCheckedAvatarId: detectiveCheckedId != null ? avatars[detectiveCheckedId] : null,
+      detectiveWasMafia: detectiveCheckedId != null ? isMafiaForDetective(r.gameState.roles[detectiveCheckedId]) : null,
+      voiceStyle: r.hostVoiceStyle,
+      killedName: victimIds[0] ? r.playerNames[victimIds[0]] : null,
+      killedAvatarId: victimIds[0] ? avatars[victimIds[0]] : null,
+    };
+    const dayLine = await getHostLine('night_summary', nightSummaryData);
+    io.to(code).emit('host_says', { text: dayLine, type: 'night_summary' });
+    await delay(speechDurationMs(dayLine));
+    const detectiveId = al.find((id) => r.gameState.roles[id] === ROLES.detective);
+    if (detectiveId && r.gameState.detectiveChecked != null) {
+      io.to(detectiveId).emit('detective_result', {
+        targetId: r.gameState.detectiveChecked,
+        isMafia: isMafiaForDetective(r.gameState.roles[r.gameState.detectiveChecked]),
+      });
+    }
+    const rolesReveal = r.playerIds.map((id) => ({
+      name: r.playerNames[id] || id,
+      role: r.gameState.roles[id],
+      avatarId: r.playerAvatars?.[id] ?? null,
+    }));
+    const endLine = await getHostLine('game_end_summary', { winner: win, voiceStyle: r.hostVoiceStyle });
+    io.to(code).emit('host_says', { text: endLine, type: 'game_end_summary' });
+    await delay(speechDurationMs(endLine));
+    const revealLine = await getHostLine('game_end_reveal', { rolesReveal, voiceStyle: r.hostVoiceStyle });
+    io.to(code).emit('host_says', { text: revealLine, type: 'game_end_reveal' });
+    await delay(speechDurationMs(revealLine));
+    io.to(code).emit('phase', 'ended');
+    io.to(code).emit('room_updated', roomForClient(r));
+    const voteHistoryForClient = (r.voteHistory || []).map((v) => ({
+      round: v.round,
+      votes: v.tie ? null : Object.fromEntries(Object.entries(v.votes || {}).map(([id, targetId]) => [r.playerNames[id] || id, r.playerNames[targetId] || targetId])),
+      excludedName: v.tie ? null : r.playerNames[v.excludedId],
+      tie: v.tie,
+    }));
+    io.to(code).emit('game_ended', {
+      winner: win,
+      roles: r.gameState.roles,
+      playerNames: r.playerNames,
+      voteHistory: voteHistoryForClient,
+      battleLog: r.battleLog || [],
+    });
+    log('Server', 'runNightSequence DONE -> ended (win after night)', 'winner=', win);
+    return;
+  }
+
+  r.phase = 'day';
   const avatars = r.playerAvatars || {};
   const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист', veteran: 'ветеран' };
   const victims = victimIds.map((id) => ({
