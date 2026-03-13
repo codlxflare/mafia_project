@@ -105,6 +105,12 @@
   font-size: var(--text-caption);
   margin: 0 0 var(--space-sm);
 }
+.home-notification-hint {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--muted);
+  line-height: 1.4;
+}
 .home-form {
   display: flex;
   flex-direction: column;
@@ -376,6 +382,12 @@
   user-select: none;
 }
 .game-settings summary::-webkit-details-marker { display: none; }
+.game-settings-hint {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--text-small);
+  color: var(--muted);
+  line-height: 1.4;
+}
 .game-settings-inner {
   display: flex;
   flex-wrap: wrap;
@@ -1756,6 +1768,15 @@
   border: 2px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
   transition: border-color 0.2s, background 0.2s, transform 0.2s ease, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lobby-avatar-emoji {
+  display: block;
+  line-height: 1;
+  font-size: inherit;
+  text-align: center;
 }
 .lobby-avatar-btn:hover {
   border-color: rgba(255, 255, 255, 0.22);

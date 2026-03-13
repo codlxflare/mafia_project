@@ -360,20 +360,13 @@ export default function Game({
         <details className="game-settings">
           <summary>Настройки озвучки</summary>
           <div className="game-settings-inner">
-            <label className="tts-toggle">
-              <input
-                type="checkbox"
-                checked={speakHost}
-                onChange={(e) => setSpeakHost(e.target.checked)}
-              />
-              <span>Озвучивать ведущего</span>
-            </label>
             {typeof setSoundEffects === 'function' && (
               <label className="tts-toggle">
                 <input type="checkbox" checked={soundEffects} onChange={(e) => setSoundEffects(e.target.checked)} />
                 <span>Звуки фаз</span>
               </label>
             )}
+            <p className="game-settings-hint">Если ведущего не слышно — включите звук уведомлений на телефоне.</p>
             {ttsError && (
               <p className="tts-error small">
                 {ttsError}

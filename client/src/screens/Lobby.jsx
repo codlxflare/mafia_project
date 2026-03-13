@@ -1,6 +1,6 @@
 import { AVATAR_IDS, getAvatarEmoji } from '../avatars';
 
-export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, speakHost, setSpeakHost, onCopyCode, copyToast, startingGame }) {
+export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, onCopyCode, copyToast, startingGame }) {
   const playerIds = room?.playerIds || [];
   const playerNames = room?.playerNames || {};
   const playerAvatars = room?.playerAvatars || {};
@@ -35,7 +35,7 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
               onClick={() => onSetAvatar?.(id)}
               title={id}
             >
-              {getAvatarEmoji(id)}
+              <span className="lobby-avatar-emoji">{getAvatarEmoji(id)}</span>
             </button>
           ))}
         </div>
@@ -100,17 +100,6 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
         <button className="btn primary start" onClick={onStartGame} disabled={startingGame}>
           {startingGame ? 'Запуск…' : 'Начать игру'}
         </button>
-      )}
-
-      {isCreator && (
-        <label className="tts-toggle">
-          <input
-            type="checkbox"
-            checked={speakHost}
-            onChange={(e) => setSpeakHost(e.target.checked)}
-          />
-          <span>Озвучивать ведущего (ИИ-голос, колонка)</span>
-        </label>
       )}
     </div>
   );

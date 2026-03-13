@@ -35,13 +35,13 @@ app.post('/api/tts', async (req, res) => {
     res.status(503).json({ error: `TTS не настроен: задайте ${keyName} в server/.env` });
     return;
   }
-  const { text } = req.body || {};
+  const { text, type } = req.body || {};
   if (!text || typeof text !== 'string' || text.length > 4000) {
     res.status(400).json({ error: 'Нужен текст до 4000 символов' });
     return;
   }
   try {
-    const buffer = await synthesizeSpeech(text);
+    const buffer = await synthesizeSpeech(text, { type });
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
     res.send(buffer);
@@ -72,7 +72,7 @@ async function processRoomAnnounces(io, code) {
   const item = room.announceQueue.shift();
   try {
     const line = await getHostLine(item.type, { ...item.data, voiceStyle: room.hostVoiceStyle });
-    io.to(code).emit('host_says', line);
+    io.to(code).emit('host_says', { text: line, type: item.type });
   } finally {
     room.announceInProgress = false;
     if (room.announceQueue?.length > 0) processRoomAnnounces(io, code);
@@ -314,7 +314,7 @@ function waitForNightChoice(io, code, roleKey) {
                   : roleKey === 'veteran'
                     ? r2.gameState.nightChoices.veteran !== undefined
                     : false);
-        if (!hasNow) io.to(code).emit('host_says', line);
+        if (!hasNow) io.to(code).emit('host_says', { text: line, type: nudgeKey });
       }
     }, NIGHT_NUDGE_MS);
     check();
@@ -341,14 +341,14 @@ async function runNightSequence(io, code) {
   const say = async (step, data = {}) => {
     const text = await getHostLine(step, { ...data, voiceStyle: room.hostVoiceStyle });
     log('Server', 'host_says', step);
-    io.to(code).emit('host_says', text);
+    io.to(code).emit('host_says', { text, type: step });
     await delay(speechDurationMs(text));
   };
 
   const sayTransition = async (step, data = {}) => {
     const text = await getHostLine(step, { ...data, voiceStyle: room.hostVoiceStyle });
     log('Server', 'host_says', step);
-    io.to(code).emit('host_says', text);
+    io.to(code).emit('host_says', { text, type: step });
     await delay(Math.min(speechDurationMs(text), TRANSITION_PHRASE_MAX_MS));
   };
 
@@ -369,7 +369,7 @@ async function runNightSequence(io, code) {
     const { victimId: firstCount, tied } = countMafiaVotes(rAfterMafia);
     if (tied) {
       const line = await getHostLine('night_mafia_tie', { voiceStyle: rAfterMafia.hostVoiceStyle });
-      io.to(code).emit('host_says', line);
+      io.to(code).emit('host_says', { text: line, type: 'night_mafia_tie' });
       await delay(speechDurationMs(line));
       mafiaVictimId = await mafiaRevoteAndResolve(io, code);
       rAfterMafia = rooms.get(code);
@@ -503,7 +503,7 @@ async function runNightSequence(io, code) {
     killedAvatarId: victimIds[0] ? avatars[victimIds[0]] : null,
   };
   const dayLine = await getHostLine('night_summary', nightSummaryData);
-  io.to(code).emit('host_says', dayLine);
+  io.to(code).emit('host_says', { text: dayLine, type: 'night_summary' });
   await delay(speechDurationMs(dayLine));
   const detectiveId = al.find((id) => r.gameState.roles[id] === ROLES.detective);
   if (detectiveId && r.gameState.detectiveChecked != null) {
@@ -513,7 +513,7 @@ async function runNightSequence(io, code) {
     });
   }
   const discussionLine = await getHostLine('day_discussion', { round: r.gameState.roundIndex ?? 1, voiceStyle: r.hostVoiceStyle });
-  io.to(code).emit('host_says', discussionLine);
+  io.to(code).emit('host_says', { text: discussionLine, type: 'day_discussion' });
   io.to(code).emit('host_announced', 'day');
   if (r.battleLog) r.battleLog.push({ type: 'night_end', round: r.gameState.roundIndex ?? 1, killed: victimIds.map((id) => r.playerNames[id]) });
   await delay(speechDurationMs(discussionLine));
@@ -605,7 +605,7 @@ io.on('connection', (socket) => {
     cb({ code, playerId: socket.id });
     io.to(code).emit('room_updated', roomForClient(rooms.get(code)));
     const roomCreated = rooms.get(code);
-    getHostLine('room_created', { creatorName: name, need: MIN_PLAYERS, voiceStyle: roomCreated?.hostVoiceStyle }).then((line) => io.to(code).emit('host_says', line));
+    getHostLine('room_created', { creatorName: name, need: MIN_PLAYERS, voiceStyle: roomCreated?.hostVoiceStyle }).then((line) => io.to(code).emit('host_says', { text: line, type: 'room_created' }));
   });
 
   socket.on('join_room', (payload, cb) => {
@@ -713,7 +713,7 @@ io.on('connection', (socket) => {
     const code = socket.data.roomCode;
     io.to(code).emit('game_started', { playerIds: room.playerIds, phase: 'roles', roundIndex: 1 });
     const startLine = await getHostLine('game_start', { voiceStyle: room.hostVoiceStyle });
-    io.to(code).emit('host_says', startLine);
+    io.to(code).emit('host_says', { text: startLine, type: 'game_start' });
     await delay(speechDurationMs(startLine));
     room.playerIds.forEach((id) => io.to(id).emit('your_role', roles[id]));
     const DELAY_AFTER_ROLES_REVEAL_MS = readDelay('MAFIA_DELAY_AFTER_ROLES_REVEAL_MS', 5500);
@@ -725,7 +725,7 @@ io.on('connection', (socket) => {
       roleCounts,
       voiceStyle: room.hostVoiceStyle,
     });
-    io.to(code).emit('host_says', rolesDoneLine);
+    io.to(code).emit('host_says', { text: rolesDoneLine, type: 'roles_done' });
     io.to(code).emit('phase', 'roles_done');
     await delay(speechDurationMs(rolesDoneLine));
     const DELAY_AFTER_ROLES_DONE_BEFORE_NIGHT_MS = readDelay('MAFIA_DELAY_AFTER_ROLES_DONE_BEFORE_NIGHT_MS', 1800);
@@ -863,7 +863,7 @@ io.on('connection', (socket) => {
       detectiveWasMafia: checkId != null ? isMafiaForDetective(room.gameState.roles[checkId]) : null,
     };
     const dayLine = await getHostLine('night_summary', nightSummaryData);
-    io.to(socket.data.roomCode).emit('host_says', dayLine);
+    io.to(socket.data.roomCode).emit('host_says', { text: dayLine, type: 'night_summary' });
     io.to(socket.data.roomCode).emit('phase', 'day');
     io.to(socket.data.roomCode).emit('day_started', {
       killed: target,
@@ -905,7 +905,7 @@ io.on('connection', (socket) => {
     room.voteCountingStarted = true;
 
     const countingLine = await getHostLine('vote_counting', { voiceStyle: room.hostVoiceStyle });
-    io.to(code).emit('host_says', countingLine);
+    io.to(code).emit('host_says', { text: countingLine, type: 'vote_counting' });
     await delay(speechDurationMs(countingLine));
 
     const r = rooms.get(code);
@@ -931,7 +931,7 @@ io.on('connection', (socket) => {
         if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId: null, tie: true });
         if (r.battleLog) r.battleLog.push({ type: 'vote_tie', round: r.gameState.roundIndex ?? 1 });
         const line = await getHostLine('vote_tie_break', { voiceStyle: r.hostVoiceStyle });
-        io.to(code).emit('host_says', line);
+        io.to(code).emit('host_says', { text: line, type: 'vote_tie_break' });
         await delay(speechDurationMs(line));
         io.to(code).emit('vote_tie_break', { secondsLeft: VOTE_TIE_BREAK_SEC });
         await delay(VOTE_TIE_BREAK_SEC * 1000);
@@ -946,7 +946,7 @@ io.on('connection', (socket) => {
       r.voteTieFavorites = null;
       if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId: null, tie: true });
       const line = await getHostLine('vote_tie', { voiceStyle: r.hostVoiceStyle });
-      io.to(code).emit('host_says', line);
+      io.to(code).emit('host_says', { text: line, type: 'vote_tie' });
       await delay(speechDurationMs(line));
       r.phase = 'night';
       r.votes = {};
@@ -974,7 +974,7 @@ io.on('connection', (socket) => {
       round: r.gameState.roundIndex ?? 1,
       voiceStyle: r.hostVoiceStyle,
     });
-    io.to(code).emit('host_says', voteLine);
+    io.to(code).emit('host_says', { text: voteLine, type: 'vote_result_summary' });
     await delay(speechDurationMs(voteLine));
     r.votes = {};
     const win = checkWin(r.gameState);
@@ -986,10 +986,10 @@ io.on('connection', (socket) => {
         avatarId: r.playerAvatars?.[id] ?? null,
       }));
       const endLine = await getHostLine('game_end_summary', { winner: win, voiceStyle: r.hostVoiceStyle });
-      io.to(code).emit('host_says', endLine);
+      io.to(code).emit('host_says', { text: endLine, type: 'game_end_summary' });
       await delay(speechDurationMs(endLine));
       const revealLine = await getHostLine('game_end_reveal', { rolesReveal, voiceStyle: r.hostVoiceStyle });
-      io.to(code).emit('host_says', revealLine);
+      io.to(code).emit('host_says', { text: revealLine, type: 'game_end_reveal' });
       await delay(speechDurationMs(revealLine));
       io.to(code).emit('phase', 'ended');
       io.to(code).emit('room_updated', roomForClient(r));
@@ -1023,7 +1023,7 @@ io.on('connection', (socket) => {
       room.discussionTurnTimeout = null;
     }
     const line = await getHostLine('vote_start', { voiceStyle: room.hostVoiceStyle });
-    io.to(socket.data.roomCode).emit('host_says', line);
+    io.to(socket.data.roomCode).emit('host_says', { text: line, type: 'vote_start' });
     await delay(speechDurationMs(line));
     room.phase = 'voting';
     room.votes = {};

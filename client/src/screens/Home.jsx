@@ -30,6 +30,7 @@ export default function Home({ onCreateRoom, onJoinRoom, homeError, creatingRoom
       <div className="screen home">
         <h2>Создать комнату</h2>
         <p className="hint">Имя будет видно всем в комнате</p>
+        <p className="home-notification-hint">Если ведущего не слышно — включите звук уведомлений на телефоне.</p>
         <div className="home-form">
           <input
             type="text"

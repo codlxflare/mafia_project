@@ -12,9 +12,43 @@
 import { ProxyAgent } from 'undici';
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
-const ELEVENLABS_DEFAULT_VOICE = 'JBFqnCBsd6RMkjVDRZzb';
-const ELEVENLABS_MODEL = 'eleven_multilingual_v2';
+const ELEVENLABS_DEFAULT_VOICE = '1EVds7FNGSXoKeOiMXuf';
+const ELEVENLABS_MODEL_DEFAULT = 'eleven_multilingual_v2';
 const ELEVENLABS_OUTPUT = 'mp3_44100_128';
+
+function getElevenLabsModel() {
+  const env = (process.env.TTS_MODEL || process.env.ELEVENLABS_MODEL || '').toLowerCase();
+  return env === 'eleven_v3' ? 'eleven_v3' : ELEVENLABS_MODEL_DEFAULT;
+}
+
+const ELEVEN_V3_EMOTION_BY_TYPE = {
+  game_end_summary: '[dramatic] ',
+  game_end_reveal: '[dramatic] ',
+  vote_result_summary: '[dramatic] ',
+  night_summary: '[serious] ',
+  vote_counting: '[serious] ',
+  vote_tie: '[serious] ',
+  vote_tie_break: '[serious] ',
+  night_mafia_wake: '[suspense] ',
+  night_doctor_wake: '[suspense] ',
+  night_detective_wake: '[suspense] ',
+  night_veteran_wake: '[suspense] ',
+  night_mafia_tie: '[serious] ',
+  night_nudge_mafia: '[suspense] ',
+  night_nudge_doctor: '[suspense] ',
+  night_nudge_detective: '[suspense] ',
+  night_nudge_veteran: '[suspense] ',
+  room_created: '[friendly] ',
+  player_joined: '[friendly] ',
+};
+
+function applyEmotionTag(text, type) {
+  if (!text || typeof text !== 'string') return text;
+  const model = getElevenLabsModel();
+  if (model !== 'eleven_v3' || getProvider() !== 'elevenlabs') return text;
+  const tag = type && ELEVEN_V3_EMOTION_BY_TYPE[type];
+  return tag ? tag + text : text;
+}
 
 /** Опции fetch: если задан TTS_PROXY или HTTPS_PROXY (http/https) — запросы идут через прокси. withoutProxy=true — не использовать прокси. */
 function getFetchOptions(withoutProxy = false) {
@@ -209,7 +243,7 @@ async function synthesizeElevenLabs(text, withoutProxy = false) {
       },
       body: JSON.stringify({
         text: text.trim(),
-        model_id: ELEVENLABS_MODEL,
+        model_id: getElevenLabsModel(),
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),
     });
@@ -244,18 +278,20 @@ async function synthesizeElevenLabs(text, withoutProxy = false) {
 
 /**
  * Синтез речи. Возвращает буфер MP3.
+ * options.type — тип реплики (night_summary, game_end_summary и т.д.) для эмоциональных тегов Eleven v3.
  * При TTS_PROVIDER=elevenlabs при любой ошибке (сеть, 403, прокси) пробует OpenAI, если задан OPENAI_API_KEY.
  */
-export async function synthesizeSpeech(text) {
+export async function synthesizeSpeech(text, options = {}) {
   if (!text || typeof text !== 'string' || text.length > 4000) {
     throw new Error('Нужен текст до 4000 символов');
   }
+  const textForTts = applyEmotionTag(text, options.type);
   const provider = getProvider();
   if (provider === 'elevenlabs') {
     try {
       const workerUrl = (process.env.TTS_CF_WORKER_URL || '').trim();
-      if (workerUrl) return await synthesizeElevenLabsViaWorker(text);
-      return await synthesizeElevenLabs(text);
+      if (workerUrl) return await synthesizeElevenLabsViaWorker(textForTts);
+      return await synthesizeElevenLabs(textForTts);
     } catch (e) {
       if (process.env.OPENAI_API_KEY) {
         const hint = e?.isCloudflareBlock ? '403 (Cloudflare)' : (e?.message || 'недоступен');

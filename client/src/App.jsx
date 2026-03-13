@@ -122,7 +122,9 @@ export default function App() {
   // Очередь озвучки: только ИИ (OpenAI/ElevenLabs). Без браузерной озвучки; при ошибке — сообщение и кнопка «Включить озвучку».
   const processTtsQueue = useCallback(() => {
     if (ttsBlockedRef.current || ttsPlayingRef.current || ttsQueueRef.current.length === 0) return;
-    const text = ttsQueueRef.current.shift();
+    const item = ttsQueueRef.current.shift();
+    const text = typeof item === 'string' ? item : item?.text;
+    const type = typeof item === 'object' && item && 'type' in item ? item.type : undefined;
     if (!text) {
       processTtsQueue();
       return;
@@ -132,15 +134,16 @@ export default function App() {
 
     const serverOnlyFail = (reason) => {
       setTtsError(reason || 'Озвучка недоступна. Нажмите «Включить озвучку».');
-      ttsQueueRef.current.unshift(text);
+      ttsQueueRef.current.unshift(item);
       ttsPlayingRef.current = false;
       ttsBlockedRef.current = true;
     };
 
+    const body = type != null ? { text, type } : { text };
     fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
     })
       .then(async (r) => {
         const contentType = r.headers.get('Content-Type') || '';
@@ -240,11 +243,14 @@ export default function App() {
     processTtsQueue();
   }, [processTtsQueue]);
 
-  const addHostLine = useCallback((text) => {
+  const addHostLine = useCallback((payload) => {
     if (typeof window === 'undefined') return;
     if (!isCreatorRef.current) return;
     if (!speakHostRef.current) return;
-    ttsQueueRef.current.push(text);
+    const text = payload && typeof payload === 'object' && typeof payload.text === 'string' ? payload.text : payload;
+    const type = payload && typeof payload === 'object' ? payload.type : undefined;
+    if (!text) return;
+    ttsQueueRef.current.push(type != null ? { text, type } : text);
     processTtsQueue();
   }, [processTtsQueue]);
 
@@ -484,8 +490,6 @@ export default function App() {
           isCreator={isCreator}
           onStartGame={startGame}
           onRoomSettings={setRoomSettings}
-          speakHost={speakHost}
-          setSpeakHost={setSpeakHost}
           onCopyCode={copyRoomCode}
           copyToast={copyToast}
           startingGame={startingGame}
