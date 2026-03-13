@@ -551,9 +551,15 @@ function scheduleNextDiscussionTurn(io, code) {
   }, turnSec * 1000);
 }
 
+/** Возвращает только сериализуемые поля комнаты для emit (без Set, циклов, таймеров). */
 function roomForClient(room) {
   if (!room) return null;
-  const r = { ...room, playerIds: room.playerIds, playerNames: room.playerNames, playerAvatars: room.playerAvatars || {}, phase: room.phase };
+  const r = {
+    playerIds: Array.isArray(room.playerIds) ? room.playerIds.slice() : [],
+    playerNames: room.playerNames && typeof room.playerNames === 'object' ? { ...room.playerNames } : {},
+    playerAvatars: room.playerAvatars && typeof room.playerAvatars === 'object' ? { ...room.playerAvatars } : {},
+    phase: room.phase,
+  };
   if (room.discussionTimerSec != null) r.discussionTimerSec = room.discussionTimerSec;
   if (room.discussionTurnSec != null) r.discussionTurnSec = room.discussionTurnSec;
   if (room.hostVoiceStyle != null) r.hostVoiceStyle = room.hostVoiceStyle;
@@ -561,8 +567,8 @@ function roomForClient(room) {
   if (room.disconnectedIds?.size) r.disconnectedIds = [...room.disconnectedIds];
   if (room.gameState) {
     r.gameState = {
-      dead: [...room.gameState.dead],
-      playerIds: room.gameState.playerIds,
+      dead: Array.from(room.gameState.dead || []),
+      playerIds: Array.isArray(room.gameState.playerIds) ? room.gameState.playerIds.slice() : [],
       roundIndex: room.gameState.roundIndex,
     };
   }
