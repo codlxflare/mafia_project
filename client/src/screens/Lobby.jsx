@@ -1,4 +1,5 @@
 import { AVATAR_IDS, getAvatarEmoji } from '../avatars';
+import { HOST_STYLES } from '../constants/hostStyles';
 
 export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator, onStartGame, onRoomSettings, onCopyCode, copyToast, startingGame }) {
   const playerIds = room?.playerIds || [];
@@ -85,9 +86,11 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
               value={voiceStyle}
               onChange={(e) => onRoomSettings?.({ hostVoiceStyle: e.target.value })}
             >
-              <option value="funny">С юмором</option>
-              <option value="strict">Строгий</option>
+              {HOST_STYLES.map((s) => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
             </select>
+            <p className="host-style-description">{HOST_STYLES.find((s) => s.id === voiceStyle)?.description ?? ''}</p>
           </label>
         </div>
       )}

@@ -279,6 +279,12 @@
   font-family: var(--font);
   font-size: var(--text-body);
 }
+.lobby-settings .host-style-description {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--text-small);
+  color: var(--muted);
+  line-height: 1.35;
+}
 .lobby .host-block,
 .game .host-speaker {
   background: var(--surface);
