@@ -1638,6 +1638,29 @@
   border-color: rgba(255, 200, 80, 0.7);
   box-shadow: 0 0 24px rgba(255, 180, 60, 0.4), inset 0 0 12px rgba(255, 200, 100, 0.08);
 }
+.game-table-seat--tie-favorite .game-table-seat-inner {
+  border-color: rgba(255, 180, 60, 0.6);
+  box-shadow: 0 0 20px rgba(255, 160, 40, 0.35);
+}
+.game-table-seat--mafia-target .game-table-seat-inner {
+  border-color: rgba(200, 60, 60, 0.6);
+  box-shadow: 0 0 20px rgba(180, 50, 50, 0.4);
+}
+.game-table-seat-mafia-target {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #ffcccc;
+  background: rgba(120, 20, 25, 0.9);
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 2;
+  pointer-events: none;
+}
 /* Результат проверки комиссара над аватаром */
 .game-table-seat-check {
   position: absolute;

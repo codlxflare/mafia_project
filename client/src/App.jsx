@@ -46,6 +46,8 @@ export default function App() {
   const [excludedForLastWords, setExcludedForLastWords] = useState(null);
   const [voteCounts, setVoteCounts] = useState({});
   const [mafiaVotesSummary, setMafiaVotesSummary] = useState([]);
+  const [mafiaTargetId, setMafiaTargetId] = useState(null);
+  const [tieBreakSecondsLeft, setTieBreakSecondsLeft] = useState(null);
   const [hostAnnouncedDay, setHostAnnouncedDay] = useState(false);
   const [hostAnnouncedNightStep, setHostAnnouncedNightStep] = useState(null);
   const [speakHost, setSpeakHost] = useState(true);
@@ -82,6 +84,17 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'voting') setVoteCounts({});
   }, [phase]);
+  useEffect(() => {
+    if (phase !== 'night') setMafiaTargetId(null);
+  }, [phase]);
+  useEffect(() => {
+    if (phase !== 'voting') setTieBreakSecondsLeft(null);
+  }, [phase]);
+  useEffect(() => {
+    if (tieBreakSecondsLeft == null || tieBreakSecondsLeft <= 0) return;
+    const t = setInterval(() => setTieBreakSecondsLeft((s) => (s <= 0 ? null : s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [tieBreakSecondsLeft]);
   useEffect(() => {
     if (!socket || screen !== 'game' || phase !== 'night' || nightSyncRequestedRef.current) return;
     nightSyncRequestedRef.current = true;
@@ -362,9 +375,13 @@ export default function App() {
       log('night_turn_end', data?.step);
       if (nightTurnRef.current?.step === data?.step) setNightTurn(null);
       setHostAnnouncedNightStep(null);
-      if (data?.step === 'mafia' || data?.step === 'don_decides') setMafiaVotesSummary([]);
+      if (data?.step === 'mafia' || data?.step === 'don_decides') {
+        setMafiaVotesSummary([]);
+        setMafiaTargetId(null);
+      }
     });
     socket.on('mafia_votes', (data) => setMafiaVotesSummary(data?.votesByTarget || []));
+    socket.on('mafia_target_set', (data) => setMafiaTargetId(data?.targetId ?? null));
     socket.on('your_role', (role) => {
       log('your_role received');
       setRole(role);
@@ -382,6 +399,10 @@ export default function App() {
     socket.on('play_again_done', () => setScreen('lobby'));
     socket.on('player_excluded', (data) => setExcludedForLastWords(data || null));
     socket.on('vote_counts', (data) => setVoteCounts(data?.counts || {}));
+    socket.on('vote_tie_break', (data) => {
+      setVoteCounts({});
+      setTieBreakSecondsLeft(data?.secondsLeft ?? 30);
+    });
     socket.on('last_words_said', (payload) => setReactions((prev) => [...prev.slice(-29), { type: 'last_words', ...payload }]));
     socket.on('reaction', (payload) => setReactions((prev) => [...prev.slice(-29), { type: 'emoji', ...payload }]));
     return () => {
@@ -393,6 +414,7 @@ export default function App() {
       socket.off('night_turn');
       socket.off('night_turn_end');
       socket.off('mafia_votes');
+      socket.off('mafia_target_set');
       socket.off('your_role');
       socket.off('day_started');
       socket.off('round');
@@ -400,6 +422,7 @@ export default function App() {
       socket.off('play_again_done');
       socket.off('player_excluded');
       socket.off('vote_counts');
+      socket.off('vote_tie_break');
       socket.off('last_words_said');
       socket.off('reaction');
       socket.off('host_announced');
@@ -527,6 +550,8 @@ export default function App() {
       excludedForLastWords={excludedForLastWords}
       voteCounts={voteCounts}
       mafiaVotesSummary={mafiaVotesSummary}
+      mafiaTargetId={mafiaTargetId}
+      tieBreakSecondsLeft={tieBreakSecondsLeft}
       hostAnnouncedDay={hostAnnouncedDay}
       hostAnnouncedNightStep={hostAnnouncedNightStep}
       speakHost={speakHost}

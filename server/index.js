@@ -439,7 +439,10 @@ async function runNightSequence(io, code) {
       mafiaVictimId = firstCount;
     }
     rAfterMafia = rooms.get(code);
-    if (rAfterMafia?.gameState) rAfterMafia.gameState.nightChoices.mafia = mafiaVictimId ?? undefined;
+    if (rAfterMafia?.gameState) {
+      rAfterMafia.gameState.nightChoices.mafia = mafiaVictimId ?? undefined;
+      getAliveMafia(rAfterMafia.gameState).forEach((id) => io.to(id).emit('mafia_target_set', { targetId: mafiaVictimId ?? null }));
+    }
   }
   log('Server', '--- MAFIA STEP DONE ---');
   await delay(DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS);
@@ -626,12 +629,8 @@ async function runNightSequence(io, code) {
       isMafia: isMafiaForDetective(r.gameState.roles[r.gameState.detectiveChecked]),
     });
   }
-  const discussionLine = await getHostLine('day_discussion', { round: r.gameState.roundIndex ?? 1, voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
-  io.to(code).emit('host_says', { text: discussionLine, type: 'day_discussion' });
-  pushHostLine(r, discussionLine);
   io.to(code).emit('host_announced', 'day');
   if (r.battleLog) r.battleLog.push({ type: 'night_end', round: r.gameState.roundIndex ?? 1, killed: victimIds.map((id) => r.playerNames[id]) });
-  await delay(speechDurationMs(discussionLine));
   log('Server', 'runNightSequence DONE -> day', 'killed=', victimIds.length ? victimIds.map((id) => r.playerNames[id]) : null);
   io.to(code).emit('phase', 'day');
   io.to(code).emit('room_updated', roomForClient(r));
@@ -1060,7 +1059,7 @@ io.on('connection', (socket) => {
     if (voted.length !== canVote.length) return;
     if (room.voteCountingStarted) return;
     room.voteCountingStarted = true;
-
+    try {
     const countingLine = await getHostLine('vote_counting', { voiceStyle: room.hostVoiceStyle, recentHostLines: (room.hostRecentLines || []).slice(-8), gameContext: buildGameContext(room) });
     io.to(code).emit('host_says', { text: countingLine, type: 'vote_counting' });
     pushHostLine(room, countingLine);
@@ -1092,6 +1091,7 @@ io.on('connection', (socket) => {
         io.to(code).emit('host_says', { text: line, type: 'vote_tie_break' });
         pushHostLine(r, line);
         await delay(speechDurationMs(line));
+        io.to(code).emit('vote_counts', { counts: {} });
         io.to(code).emit('vote_tie_break', { secondsLeft: VOTE_TIE_BREAK_SEC });
         await delay(VOTE_TIE_BREAK_SEC * 1000);
         const r2 = rooms.get(code);
@@ -1184,6 +1184,10 @@ io.on('connection', (socket) => {
       io.to(code).emit('phase', 'night');
       io.to(code).emit('round', r.gameState.roundIndex);
       runNightSequence(io, code);
+    }
+    } catch (voteErr) {
+      if (room) room.voteCountingStarted = false;
+      throw voteErr;
     }
   });
 

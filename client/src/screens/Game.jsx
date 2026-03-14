@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { getAvatarEmoji } from '../avatars';
 
 const ROLE_NAMES = {
@@ -42,6 +42,8 @@ export default function Game({
   excludedForLastWords,
   voteCounts = {},
   mafiaVotesSummary = [],
+  mafiaTargetId = null,
+  tieBreakSecondsLeft = null,
   hostAnnouncedDay = false,
   hostAnnouncedNightStep = null,
   speakHost,
@@ -64,6 +66,8 @@ export default function Game({
   const [myVote, setMyVote] = useState(null);
   const [discussionSecondsLeft, setDiscussionSecondsLeft] = useState(null);
   const [lastWordsSecondsLeft, setLastWordsSecondsLeft] = useState(null);
+  const [lastWordsCountdownDone, setLastWordsCountdownDone] = useState(false);
+  const [votingStarting, setVotingStarting] = useState(false);
   const [discussionTurn, setDiscussionTurn] = useState(null);
   const [detectiveAction, setDetectiveAction] = useState(null);
   const [mafiaRevoteSec, setMafiaRevoteSec] = useState(null);
@@ -106,6 +110,7 @@ export default function Game({
   useEffect(() => {
     if (excludedForLastWords?.playerId === playerId && excludedForLastWords?.lastWordsSec != null) {
       setLastWordsSecondsLeft(excludedForLastWords.lastWordsSec);
+      setLastWordsCountdownDone(false);
       lastWordsTimerRef.current = setInterval(() => {
         setLastWordsSecondsLeft((s) => (s == null || s <= 0 ? null : s - 1));
       }, 1000);
@@ -113,6 +118,17 @@ export default function Game({
     }
     setLastWordsSecondsLeft(null);
   }, [excludedForLastWords?.playerId, excludedForLastWords?.lastWordsSec, playerId]);
+  useEffect(() => {
+    if (!excludedForLastWords?.lastWordsSec) {
+      setLastWordsCountdownDone(false);
+      return;
+    }
+    const t = setTimeout(() => setLastWordsCountdownDone(true), excludedForLastWords.lastWordsSec * 1000);
+    return () => clearTimeout(t);
+  }, [excludedForLastWords?.playerId, excludedForLastWords?.lastWordsSec]);
+  useEffect(() => {
+    if (phase === 'voting') setVotingStarting(false);
+  }, [phase]);
   useEffect(() => {
     if (phase !== 'day') setDiscussionTurn(null);
   }, [phase]);
@@ -176,6 +192,8 @@ export default function Game({
   };
 
   const startVoting = () => {
+    if (votingStarting) return;
+    setVotingStarting(true);
     socket?.emit('start_voting');
   };
 
@@ -235,6 +253,14 @@ export default function Game({
   }
 
   const { tableSelectableIds, tableChosenId, tableOnSelect, tableSelectionHint } = getTableSelection();
+
+  const mafiaVoteCountsByTarget = useMemo(() => {
+    if ((role !== 'mafia' && role !== 'don') || !nightTurn || (nightTurn.step !== 'mafia' && nightTurn.step !== 'don_decides')) return {};
+    return (mafiaVotesSummary || []).reduce((acc, v) => {
+      if (v.targetId) acc[v.targetId] = (acc[v.targetId] || 0) + (v.count || 0);
+      return acc;
+    }, {});
+  }, [role, nightTurn, mafiaVotesSummary]);
 
   useEffect(() => {
     if (!socket) return;
@@ -380,8 +406,12 @@ export default function Game({
 
       {excludedForLastWords?.playerId === playerId && (
         <div className="last-words-block">
-          <p className="last-words-title">Последнее слово — говорите вслух</p>
-          <p className="last-words-timer">{lastWordsSecondsLeft != null ? lastWordsSecondsLeft : excludedForLastWords.lastWordsSec} сек</p>
+          <p className="last-words-title">
+            {lastWordsCountdownDone ? 'Ожидание объявления ведущего…' : 'Последнее слово — говорите вслух'}
+          </p>
+          <p className="last-words-timer">
+            {lastWordsCountdownDone ? '' : (lastWordsSecondsLeft != null ? lastWordsSecondsLeft : excludedForLastWords.lastWordsSec) + ' сек'}
+          </p>
         </div>
       )}
       {isDead && !excludedForLastWords?.playerId && (
@@ -391,7 +421,7 @@ export default function Game({
       )}
       {excludedForLastWords && excludedForLastWords.playerId !== playerId && (
         <div className={isDead ? 'you-dead' : 'last-words-wait'}>
-          Ожидание последнего слова исключённого ({excludedForLastWords.excludedName})…
+          {lastWordsCountdownDone ? 'Ожидание объявления ведущего…' : `Ожидание последнего слова исключённого (${excludedForLastWords.excludedName})…`}
         </div>
       )}
 
@@ -494,15 +524,9 @@ export default function Game({
           onSkip={() => sendNightChoice({ veteranProtect: false })}
         />
       )}
-      {detectiveResult && (
-        <p className="detective-result detective-result--enter" aria-live="polite">
-          Результат проверки отображается над аватаром выбранного игрока за столом.
-        </p>
-      )}
-
       {phase === 'day' && hostAnnouncedDay && isCreator && (
-        <button className="btn primary btn-cta" onClick={startVoting}>
-          Завершить обсуждение → Голосование
+        <button type="button" className="btn primary btn-cta" onClick={startVoting} disabled={votingStarting} aria-busy={votingStarting}>
+          {votingStarting ? 'Переход к голосованию…' : 'Завершить обсуждение → Голосование'}
         </button>
       )}
 
@@ -510,9 +534,6 @@ export default function Game({
         <div className="discussion-panel">
           <div className="discussion-panel-top">
             <span className="discussion-panel-title">Обсуждение</span>
-            {discussionSecondsLeft != null && (
-              <span className="discussion-panel-total" aria-label="Общее время">{Math.floor(discussionSecondsLeft / 60)}:{(discussionSecondsLeft % 60).toString().padStart(2, '0')}</span>
-            )}
           </div>
           {discussionTurn ? (
             <div className={`discussion-now ${discussionTurn.playerId === playerId ? 'discussion-now--you' : ''}`} aria-live="polite">
@@ -545,6 +566,9 @@ export default function Game({
           <h3 className="vote-block-title">
             {voteTieFavorites?.length ? 'Переголосование: только между фаворитами' : 'Голосование: кого исключить?'}
           </h3>
+          {voteTieFavorites?.length > 0 && tieBreakSecondsLeft != null && (
+            <p className="vote-block-tie-timer" aria-live="polite">{tieBreakSecondsLeft} сек</p>
+          )}
           {!canVoteInTieBreak ? (
             <p className="vote-block-hint">Вы в числе фаворитов — в переголосовании голоса не имеете.</p>
           ) : myVote ? (
@@ -586,12 +610,15 @@ export default function Game({
         detectiveCheckPlayerId={detectiveResult != null && myChoice?.id ? myChoice.id : null}
         detectiveCheckIsMafia={detectiveResult?.isMafia}
         voteCounts={voteCounts}
+        mafiaVoteCountsByTarget={mafiaVoteCountsByTarget}
+        mafiaTargetId={mafiaTargetId}
+        voteTieFavorites={voteTieFavorites}
       />
     </div>
   );
 }
 
-/** Круглый стол: аватарки по кругу, выбор по клику на аватар, визуал проверки комиссара */
+/** Круглый стол: аватарки по кругу, выбор по клику на аватар, визуал проверки комиссара, голоса мафии/дона */
 function GameTable({
   playerIds,
   playerNames,
@@ -608,6 +635,9 @@ function GameTable({
   detectiveCheckPlayerId = null,
   detectiveCheckIsMafia = null,
   voteCounts = {},
+  mafiaVoteCountsByTarget = {},
+  mafiaTargetId = null,
+  voteTieFavorites = null,
 }) {
   const voteLabel = (n) => {
     if (n === 1) return '1 голос';
@@ -657,8 +687,10 @@ function GameTable({
             const selectable = isSelectable(id);
             const chosen = chosenPlayerId === id;
             const showDetectiveCheck = detectiveCheckPlayerId === id;
-            const votesForSeat = voteCounts[id];
+            const votesForSeat = phase === 'voting' ? voteCounts[id] : mafiaVoteCountsByTarget[id];
             const showVoteCount = votesForSeat != null && votesForSeat > 0;
+            const isMafiaTarget = mafiaTargetId != null && mafiaTargetId === id;
+            const isTieFavorite = Array.isArray(voteTieFavorites) && voteTieFavorites.length > 0 && voteTieFavorites.includes(id);
             const angleRad = ((360 / n) * i - 90) * (Math.PI / 180);
             const xPx = radiusPx * Math.cos(angleRad);
             const yPx = -radiusPx * Math.sin(angleRad);
@@ -677,7 +709,7 @@ function GameTable({
             return (
               <SeatWrapper
                 key={id}
-                className={`game-table-seat ${isDead ? 'game-table-seat--dead' : ''} ${isExcluded ? 'game-table-seat--excluded' : ''} ${isSpeaking ? 'game-table-seat--speaking' : ''} ${isYou ? 'game-table-seat--you' : ''} ${selectable ? 'game-table-seat--selectable' : ''} ${chosen ? 'game-table-seat--chosen' : ''}`}
+                className={`game-table-seat ${isDead ? 'game-table-seat--dead' : ''} ${isExcluded ? 'game-table-seat--excluded' : ''} ${isSpeaking ? 'game-table-seat--speaking' : ''} ${isYou ? 'game-table-seat--you' : ''} ${selectable ? 'game-table-seat--selectable' : ''} ${chosen ? 'game-table-seat--chosen' : ''} ${isMafiaTarget ? 'game-table-seat--mafia-target' : ''} ${isTieFavorite ? 'game-table-seat--tie-favorite' : ''}`}
                 style={{ transform: `translate(-50%, -50%) translate(${xPx}px, ${yPx}px)` }}
                 {...seatProps}
               >
@@ -694,10 +726,13 @@ function GameTable({
                     </span>
                   )}
                   {showVoteCount && (
-                    <span className="game-table-seat-votes" role="status" title={`За этого игрока проголосовало: ${votesForSeat}`}>
+                    <span className="game-table-seat-votes" role="status" title={phase === 'voting' ? `За этого игрока проголосовало: ${votesForSeat}` : `Голосов мафии за этого игрока: ${votesForSeat}`}>
                       <span className="game-table-seat-votes-num">{votesForSeat}</span>
                       <span className="game-table-seat-votes-label">{voteLabel(votesForSeat)}</span>
                     </span>
+                  )}
+                  {isMafiaTarget && (
+                    <span className="game-table-seat-mafia-target" role="status">Жертва</span>
                   )}
                   {isDead && <span className="game-table-seat-gone" aria-label="выбыл"><span className="game-table-seat-gone-icon">✕</span></span>}
                 </div>
