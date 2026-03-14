@@ -787,6 +787,133 @@ io.on('connection', (socket) => {
     processRoomAnnounces(io, trimmedCode);
   });
 
+  /** Заменить игрока oldId на newId во всех структурах комнаты (для rejoin после дисконнекта). */
+  function replacePlayerIdInRoom(room, oldId, newId) {
+    const idx = room.playerIds.indexOf(oldId);
+    if (idx >= 0) room.playerIds[idx] = newId;
+    if (room.playerNames[oldId] != null) {
+      room.playerNames[newId] = room.playerNames[oldId];
+      delete room.playerNames[oldId];
+    }
+    if (room.playerAvatars && room.playerAvatars[oldId] != null) {
+      room.playerAvatars[newId] = room.playerAvatars[oldId];
+      delete room.playerAvatars[oldId];
+    }
+    if (room.creatorId === oldId) room.creatorId = newId;
+    if (room.gameState) {
+      const gs = room.gameState;
+      if (Array.isArray(gs.playerIds)) {
+        const pi = gs.playerIds.indexOf(oldId);
+        if (pi >= 0) gs.playerIds[pi] = newId;
+      }
+      if (gs.roles[oldId] != null) {
+        gs.roles[newId] = gs.roles[oldId];
+        delete gs.roles[oldId];
+      }
+      if (gs.dead?.has(oldId)) {
+        gs.dead.delete(oldId);
+        gs.dead.add(newId);
+      }
+      if (gs.lastKilled === oldId) gs.lastKilled = newId;
+      if (gs.detectiveChecked === oldId) gs.detectiveChecked = newId;
+      if (gs.lastCommissionerShotId === oldId) gs.lastCommissionerShotId = newId;
+      if (gs.savedByDoctor === oldId) gs.savedByDoctor = newId;
+      const nc = gs.nightChoices || {};
+      if (nc.doctor === oldId) nc.doctor = newId;
+      if (nc.mafia === oldId) nc.mafia = newId;
+      if (nc.detectiveCheckId === oldId) nc.detectiveCheckId = newId;
+      if (nc.commissionerShotId === oldId) nc.commissionerShotId = newId;
+      if (nc.donMafiaChoice === oldId) nc.donMafiaChoice = newId;
+      if (nc.mafiaVotes && nc.mafiaVotes[oldId] !== undefined) {
+        const target = nc.mafiaVotes[oldId];
+        delete nc.mafiaVotes[oldId];
+        nc.mafiaVotes[newId] = target;
+      }
+      Object.keys(nc.mafiaVotes || {}).forEach((voterId) => {
+        if (nc.mafiaVotes[voterId] === oldId) nc.mafiaVotes[voterId] = newId;
+      });
+    }
+    if (room.votes && room.votes[oldId] !== undefined) {
+      room.votes[newId] = room.votes[oldId];
+      delete room.votes[oldId];
+    }
+    if (room.votes) {
+      Object.keys(room.votes).forEach((voterId) => {
+        if (room.votes[voterId] === oldId) room.votes[voterId] = newId;
+      });
+    }
+    if (Array.isArray(room.voteTieFavorites)) {
+      room.voteTieFavorites = room.voteTieFavorites.map((id) => (id === oldId ? newId : id));
+    }
+    (room.voteHistory || []).forEach((v) => {
+      if (v.votes && v.votes[oldId] !== undefined) {
+        v.votes[newId] = v.votes[oldId];
+        delete v.votes[oldId];
+      }
+      Object.keys(v.votes || {}).forEach((vid) => {
+        if (v.votes[vid] === oldId) v.votes[vid] = newId;
+      });
+      if (v.excludedId === oldId) v.excludedId = newId;
+    });
+    room.disconnectedIds?.delete(oldId);
+  }
+
+  socket.on('rejoin_room', (payload, cb) => {
+    if (!payload || typeof payload !== 'object') {
+      cb({ error: 'Неверные данные' });
+      return;
+    }
+    const trimmedCode = isValidRoomCode(payload.code) ? String(payload.code).trim() : null;
+    if (!trimmedCode) {
+      cb({ error: 'Неверный код комнаты' });
+      return;
+    }
+    const room = rooms.get(trimmedCode);
+    if (!room) {
+      cb({ error: 'Комната не найдена' });
+      return;
+    }
+    if (room.phase === 'lobby') {
+      cb({ error: 'Используйте «Войти по коду» — игра ещё не началась' });
+      return;
+    }
+    if (!room.disconnectedIds?.size) {
+      cb({ error: 'Нет отключённых игроков для возвращения' });
+      return;
+    }
+    const name = normalizePlayerName(payload.playerName) || '';
+    if (!name) {
+      cb({ error: 'Введите имя, под которым вы были в комнате' });
+      return;
+    }
+    const oldId = [...(room.disconnectedIds || [])].find((id) => room.playerNames[id] === name);
+    if (!oldId) {
+      cb({ error: 'В комнате нет отключённого игрока с таким именем. Введите имя точно как при первом входе.' });
+      return;
+    }
+    if (socket.data.roomCode) {
+      cb({ error: 'Уже в другой комнате' });
+      return;
+    }
+    replacePlayerIdInRoom(room, oldId, socket.id);
+    socket.data.roomCode = trimmedCode;
+    socket.data.playerId = socket.id;
+    socket.data.isCreator = room.creatorId === socket.id;
+    socket.join(trimmedCode);
+    cb({ joined: true, playerId: socket.id, isCreator: room.creatorId === socket.id });
+    io.to(trimmedCode).emit('room_updated', roomForClient(room));
+    socket.emit('phase', room.phase);
+    socket.emit('your_role', room.gameState.roles[socket.id]);
+    if (room.phase === 'night' && room.gameState.currentNightStep) {
+      socket.emit('night_step', room.gameState.currentNightStep);
+      const roleKey = room.gameState.currentNightStep;
+      const alive = getAlivePlayers(room.gameState);
+      const payload = { step: roleKey, round: room.gameState.roundIndex ?? 1, aliveIds: alive };
+      if (roleKey === 'doctor') payload.doctorCanHealSelf = !room.gameState.doctorSelfHealed;
+      socket.emit('night_turn', payload);
+    }
+  });
+
   socket.on('room_settings', (opts, cb) => {
     const room = getRoom(socket);
     if (!room || room.creatorId !== socket.id || room.phase !== 'lobby') return cb?.({ error: 'not_creator' });

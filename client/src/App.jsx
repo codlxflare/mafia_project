@@ -443,6 +443,10 @@ export default function App() {
       }
       setRoomCode(res.code);
       setPlayerId(res.playerId);
+      try {
+        localStorage.setItem('mafia_last_room', res.code);
+        localStorage.setItem('mafia_last_name', name || 'Ведущий');
+      } catch (_) {}
       setScreen('lobby');
     });
   };
@@ -455,13 +459,36 @@ export default function App() {
     setJoiningRoom(true);
     setPlayerName(displayName);
     socket.emit('join_room', { code: trimmedCode, playerName: displayName }, (res) => {
-      setJoiningRoom(false);
       if (res?.error) {
+        if (res.error === 'Игра уже идёт') {
+          socket.emit('rejoin_room', { code: trimmedCode, playerName: displayName }, (rejoinRes) => {
+            setJoiningRoom(false);
+            if (rejoinRes?.error) {
+              setHomeError(rejoinRes.error);
+              return;
+            }
+            setRoomCode(trimmedCode);
+            setPlayerId(rejoinRes.playerId);
+            setIsCreator(!!rejoinRes.isCreator);
+            try {
+              localStorage.setItem('mafia_last_room', trimmedCode);
+              localStorage.setItem('mafia_last_name', displayName);
+            } catch (_) {}
+            setScreen('game');
+          });
+          return;
+        }
+        setJoiningRoom(false);
         setHomeError(res.error);
         return;
       }
+      setJoiningRoom(false);
       setRoomCode(trimmedCode);
       setPlayerId(res.playerId);
+      try {
+        localStorage.setItem('mafia_last_room', trimmedCode);
+        localStorage.setItem('mafia_last_name', displayName);
+      } catch (_) {}
       setScreen('lobby');
     });
   };
@@ -494,6 +521,8 @@ export default function App() {
           homeError={homeError}
           creatingRoom={creatingRoom}
           joiningRoom={joiningRoom}
+          initialJoinCode={typeof localStorage !== 'undefined' ? (localStorage.getItem('mafia_last_room') || '') : ''}
+          initialJoinName={typeof localStorage !== 'undefined' ? (localStorage.getItem('mafia_last_name') || '') : ''}
         />
       </>
     );

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Home({ onCreateRoom, onJoinRoom, homeError, creatingRoom, joiningRoom }) {
+export default function Home({ onCreateRoom, onJoinRoom, homeError, creatingRoom, joiningRoom, initialJoinCode = '', initialJoinName = '' }) {
   const [mode, setMode] = useState(null); // 'create' | 'join'
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -17,7 +17,14 @@ export default function Home({ onCreateRoom, onJoinRoom, homeError, creatingRoom
           <button className="btn primary" onClick={() => setMode('create')}>
             Создать комнату
           </button>
-          <button className="btn secondary" onClick={() => setMode('join')}>
+          <button
+            className="btn secondary"
+            onClick={() => {
+              setJoinCode(initialJoinCode || '');
+              setJoinName(initialJoinName || '');
+              setMode('join');
+            }}
+          >
             Войти по коду
           </button>
         </div>
