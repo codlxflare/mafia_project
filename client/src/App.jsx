@@ -73,6 +73,7 @@ export default function App() {
   const audioContextRef = useRef(null);
   const nightSyncRequestedRef = useRef(false);
   const audioUnlockHandledRef = useRef(false);
+  const wasDisconnectedRef = useRef(false);
   useEffect(() => { speakHostRef.current = speakHost; }, [speakHost]);
   useEffect(() => { soundEffectsRef.current = soundEffects; }, [soundEffects]);
   useEffect(() => { isCreatorRef.current = isCreator; }, [isCreator]);
@@ -101,11 +102,30 @@ export default function App() {
     socket.emit('get_night_state');
   }, [socket, screen, phase]);
 
+  // После переподключения в игре — rejoin, чтобы получить актуальную фазу и состояние
+  useEffect(() => {
+    if (!connected || !wasDisconnectedRef.current || !socket || screen !== 'game' || !roomCode || !playerName) return;
+    wasDisconnectedRef.current = false;
+    socket.emit('rejoin_room', { code: roomCode, playerName }, (res) => {
+      if (res?.error) {
+        setScreen('home');
+        setHomeError(res.error || 'Не удалось вернуться в игру');
+        return;
+      }
+      setPlayerId(res?.playerId ?? playerId);
+      setIsCreator(!!res?.isCreator);
+      nightSyncRequestedRef.current = false;
+    });
+  }, [connected, socket, screen, roomCode, playerName]);
+
   useEffect(() => {
     const s = getSocket();
     setSocket(s);
     const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
+    const onDisconnect = () => {
+      setConnected(false);
+      wasDisconnectedRef.current = true;
+    };
     const onConnectError = () => setConnected(false);
     s.on('connect', onConnect);
     s.on('disconnect', onDisconnect);

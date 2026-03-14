@@ -599,6 +599,7 @@ export default function Game({
         playerNames={playerNames}
         playerAvatars={playerAvatars}
         dead={dead}
+        disconnectedIds={room?.disconnectedIds || []}
         excludedForLastWords={excludedForLastWords}
         discussionTurnPlayerId={discussionTurn?.playerId}
         currentPlayerId={playerId}
@@ -624,6 +625,7 @@ function GameTable({
   playerNames,
   playerAvatars,
   dead,
+  disconnectedIds = [],
   excludedForLastWords,
   discussionTurnPlayerId,
   currentPlayerId,
@@ -639,6 +641,7 @@ function GameTable({
   mafiaTargetId = null,
   voteTieFavorites = null,
 }) {
+  const disconnectedSet = new Set(Array.isArray(disconnectedIds) ? disconnectedIds : []);
   const voteLabel = (n) => {
     if (n === 1) return '1 голос';
     if (n >= 2 && n <= 4) return `${n} голоса`;
@@ -681,6 +684,7 @@ function GameTable({
         <div className="game-table-seats">
           {playerIds.map((id, i) => {
             const isDead = dead.includes(id);
+            const isDisconnected = disconnectedSet.has(id);
             const isExcluded = excludedForLastWords?.playerId === id;
             const isSpeaking = discussionTurnPlayerId === id;
             const isYou = currentPlayerId === id;
@@ -709,13 +713,20 @@ function GameTable({
             return (
               <SeatWrapper
                 key={id}
-                className={`game-table-seat ${isDead ? 'game-table-seat--dead' : ''} ${isExcluded ? 'game-table-seat--excluded' : ''} ${isSpeaking ? 'game-table-seat--speaking' : ''} ${isYou ? 'game-table-seat--you' : ''} ${selectable ? 'game-table-seat--selectable' : ''} ${chosen ? 'game-table-seat--chosen' : ''} ${isMafiaTarget ? 'game-table-seat--mafia-target' : ''} ${isTieFavorite ? 'game-table-seat--tie-favorite' : ''}`}
+                className={`game-table-seat ${isDead ? 'game-table-seat--dead' : ''} ${isDisconnected ? 'game-table-seat--disconnected' : ''} ${isExcluded ? 'game-table-seat--excluded' : ''} ${isSpeaking ? 'game-table-seat--speaking' : ''} ${isYou ? 'game-table-seat--you' : ''} ${selectable ? 'game-table-seat--selectable' : ''} ${chosen ? 'game-table-seat--chosen' : ''} ${isMafiaTarget ? 'game-table-seat--mafia-target' : ''} ${isTieFavorite ? 'game-table-seat--tie-favorite' : ''}`}
                 style={{ transform: `translate(-50%, -50%) translate(${xPx}px, ${yPx}px)` }}
                 {...seatProps}
               >
                 <div className="game-table-seat-inner">
                   <span className="game-table-seat-num" aria-hidden>{i + 1}</span>
-                  <span className="game-table-seat-avatar">{getAvatarEmoji(playerAvatars[id] || 'fox')}</span>
+                  <span className="game-table-seat-avatar-wrap">
+                    <span className="game-table-seat-avatar">{getAvatarEmoji(playerAvatars[id] || 'fox')}</span>
+                    {isDisconnected && (
+                      <span className="game-table-seat-avatar-disconnected" role="status" title="Нет связи. Подскажите переподключиться.">
+                        <span className="game-table-seat-avatar-disconnected-spinner" aria-hidden />
+                      </span>
+                    )}
+                  </span>
                   <span className="game-table-seat-name">{playerNames[id] || id}</span>
                   {showDetectiveCheck && (
                     <span className={`game-table-seat-check game-table-seat-check--${detectiveCheckIsMafia ? 'mafia' : 'civilian'}`} role="status">
