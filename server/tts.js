@@ -40,6 +40,7 @@ const ELEVEN_V3_EMOTION_BY_TYPE = {
   night_nudge_veteran: '[suspense] ',
   room_created: '[friendly] ',
   player_joined: '[friendly] ',
+  rules_explanation: '[friendly] ',
 };
 
 function applyEmotionTag(text, type) {
@@ -153,12 +154,18 @@ export async function checkTtsKey() {
   return result;
 }
 
+/** Лёгкая случайная вариация скорости (0.92–0.98) для естественности. */
+function getSpeedVariation() {
+  return 0.92 + Math.random() * 0.06;
+}
+
 /** Синтез через OpenAI (внутренний вызов и fallback при 403 ElevenLabs). При ошибке прокси — повтор без прокси. */
 async function synthesizeOpenAI(text, withoutProxy = false) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('TTS не настроен: задайте OPENAI_API_KEY в server/.env');
   const voice = OPENAI_VOICES.includes(process.env.TTS_VOICE) ? process.env.TTS_VOICE : 'onyx';
   const opts = getFetchOptions(withoutProxy);
+  const speed = getSpeedVariation();
   try {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       ...opts,
@@ -172,7 +179,7 @@ async function synthesizeOpenAI(text, withoutProxy = false) {
       input: text,
       voice,
       response_format: 'mp3',
-      speed: 0.9,
+      speed,
     }),
   });
   if (!response.ok) {
@@ -278,8 +285,9 @@ async function synthesizeElevenLabs(text, withoutProxy = false) {
 
 /**
  * Синтез речи. Возвращает буфер MP3.
- * В API передаётся только чистый текст (без эмоциональных тегов), чтобы теги не озвучивались.
- * При TTS_PROVIDER=elevenlabs при любой ошибке (сеть, 403, прокси) пробует OpenAI, если задан OPENAI_API_KEY.
+ * Для ElevenLabs с моделью eleven_v3 (прямой вызов, не Worker) в текст добавляются эмоциональные теги по типу события;
+ * API v3 интерпретирует их и не озвучивает. Для Worker и OpenAI передаётся только чистый текст.
+ * При TTS_PROVIDER=elevenlabs при любой ошибке пробует OpenAI, если задан OPENAI_API_KEY.
  */
 export async function synthesizeSpeech(text, options = {}) {
   if (!text || typeof text !== 'string' || text.length > 4000) {
@@ -288,10 +296,13 @@ export async function synthesizeSpeech(text, options = {}) {
   const cleanText = text.trim();
   const provider = getProvider();
   if (provider === 'elevenlabs') {
+    const workerUrl = (process.env.TTS_CF_WORKER_URL || '').trim();
+    const textForEleven = !workerUrl && getElevenLabsModel() === 'eleven_v3'
+      ? applyEmotionTag(cleanText, options.type)
+      : cleanText;
     try {
-      const workerUrl = (process.env.TTS_CF_WORKER_URL || '').trim();
       if (workerUrl) return await synthesizeElevenLabsViaWorker(cleanText);
-      return await synthesizeElevenLabs(cleanText);
+      return await synthesizeElevenLabs(textForEleven);
     } catch (e) {
       if (process.env.OPENAI_API_KEY) {
         const hint = e?.isCloudflareBlock ? '403 (Cloudflare)' : (e?.message || 'недоступен');

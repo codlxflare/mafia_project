@@ -30,6 +30,10 @@ const HOST_RULES = `Правила (обязательно):
 - Роль исключённого не раскрывай до финала; раскрывай только когда в фактах явно сказано «раскрой роль».
 - Ответ — только текст для озвучки: 1–3 короткие фразы, без кавычек, без пометок («Ведущий:», списков, тире). Один абзац.
 - В сообщении указано, какое сейчас событие. Не объявляй другие фазы и не смешивай события.
+- Веди себя как живой ведущий за столом: можно вздох, паузу, междометие («ну что», «так», «вот»), реакция на имена и аватары. Один и тот же факт можно сказать по-разному — не будь роботом.
+- Используй свои прошлые реплики для отсылок («как я и говорил», «вот мы и дошли») — так ты звучишь как один и тот же ведущий.
+Пример формата (итог ночи): Факты: Ночью погиб Вася (мирный). → Хороший ответ: Ну что ж, Вася выбыл. Обсуждение.
+Пример формата (исключение): Город прощается с Петя (аватар: Лиса), роль — мафия. → Хороший ответ: Петя, наша Лиса, оказался мафией. Такие дела.
 `;
 
 const SYSTEM_PROMPT_FUNNY = `${HOST_RULES}
@@ -103,6 +107,7 @@ const FALLBACK = {
   room_created: (name, need) => `Комната открыта. ${name} за столом, добираем ещё до ${need} человек.`,
   player_joined: (name) => `Вот и ${name} с нами.`,
   game_start: 'Сейчас раздаю роли. Погнали.',
+  rules_explanation: () => 'Коротко: ночью мафия, доктор, детектив и ветеран делают свой ход. Днём — обсуждение и голосование. Исключённый говорит последнее слово. Побеждают мафия или мирные. Погнали.',
   roles_done: (d) => {
     if (!d?.playerCount) return 'Роли розданы. Город засыпает.';
     const parts = Object.entries(d.roleCounts || {}).map(([role, n]) => {
@@ -140,15 +145,29 @@ const FALLBACK = {
   night_nudge_veteran: () => 'Ветеран, решай — защищаешься или нет?',
 };
 
-function nightSummaryFallback(d) {
+/** Одна строка исхода ночи — единственный источник правды для модели. */
+function buildNightOutcomeLine(d) {
   const n = d.victimCount ?? (d.killedName ? 1 : 0);
-  if (n === 0) return `Доктор красавчик — ночью никто не погиб. Обсуждение.`;
-  if (n === 1 && d.victims?.[0]) return `Ночью погиб ${d.victims[0].name} — ${d.victims[0].roleName}. Обсуждение.`;
-  if (n === 2 && d.victims?.length === 2) return `Ночью погибли ${d.victims[0].name} — ${d.victims[0].roleName}, и ${d.victims[1].name} — ${d.victims[1].roleName}. Обсуждение.`;
-  if (d.killedName) return `Ночью погиб ${d.killedName}. Обсуждение.`;
-  if (d.savedByName) return `Доктор спас ${d.savedByName}. Ночью никто не погиб. Обсуждение.`;
-  if (d.veteranSavedHimself) return `Ветеран защитился. Ночью никто не погиб. Обсуждение.`;
-  return 'Ночью никто не пострадал. Обсуждение.';
+  const parts = [];
+  if (n === 0) {
+    parts.push('Ночью никто не погиб.');
+    if (d.savedByName) parts.push(`Доктор спас: ${d.savedByName}.`);
+    if (d.veteranSavedHimself) parts.push('Ветеран защитился.');
+  } else if (n === 1 && d.victims?.[0]) {
+    parts.push(`Ночью погиб ${d.victims[0].name} (${d.victims[0].roleName}).`);
+    if (d.savedByName) parts.push(`Доктор спас: ${d.savedByName}.`);
+  } else if (n === 2 && d.victims?.length === 2) {
+    parts.push(`Ночью погибли ${d.victims[0].name} (${d.victims[0].roleName}) и ${d.victims[1].name} (${d.victims[1].roleName}).`);
+  } else if (d.killedName) {
+    parts.push(`Ночью погиб ${d.killedName}.`);
+  }
+  if (d.detectiveCheckedName != null) parts.push(`Детектив проверил ${d.detectiveCheckedName}: ${d.detectiveWasMafia ? 'мафия' : 'мирный'}.`);
+  return parts.length ? parts.join(' ') : 'Ночью никто не пострадал.';
+}
+
+function nightSummaryFallback(d) {
+  const line = buildNightOutcomeLine(d);
+  return `${line} Обсуждение.`;
 }
 
 function fallbackText(type, data = {}) {
@@ -161,6 +180,7 @@ function fallbackText(type, data = {}) {
     if (type === 'vote_result_summary') return v(data);
     if (type === 'game_end_summary') return v(data);
     if (type === 'roles_done') return v(data);
+    if (type === 'rules_explanation') return v();
     if (type === 'day_discussion') return v(data);
     if (type === 'player_joined') return v(data.playerName);
     if (['night_close_eyes', 'night_mafia_wake'].includes(type)) return v(data.round);
@@ -211,6 +231,9 @@ function userMessage(type, data = {}) {
       base = `Роли розданы. В игре ${count} человек. Состав только такой — назови только эти роли: ${list}. Никаких лишних. Объяви состав живо, по-русски — можно с лёгкой иронией или напряжением. Потом скажи, что город засыпает. Одна-две фразы.`;
       break;
     }
+    case 'rules_explanation':
+      base = 'Кратко объясни правила игры новичкам: ночь — мафия выбирает жертву, доктор спасает одного, детектив проверяет, ветеран может один раз защититься; день — обсуждение и голосование; исключённый говорит последнее слово; побеждают мафия или мирные. Две-четыре фразы, живо, чтобы все поняли. В своём стиле.';
+      break;
     case 'night_close_eyes':
       base = `Ночь ${data.round || 1}. Все закрывают глаза. Одна фраза — тихо, с атмосферой, можно чуть зловеще или с юмором.`;
       break;
@@ -242,16 +265,8 @@ function userMessage(type, data = {}) {
       base = 'Рассвет. Все открывают глаза. Одна фраза — облегчение, драма или ирония, в зависимости от того, что было ночью.';
       break;
     case 'night_summary': {
-      const n = data.victimCount ?? (data.killedName ? 1 : 0);
-      const parts = [];
-      if (n === 0) parts.push('Жертв нет — доктор спас всех (или мафия не выбрала). Скажи что-то вроде «Доктор красавчик» или «Ночью никто не пострадал».');
-      else if (n === 1 && data.victims?.[0]) parts.push(`Одна жертва: ${data.victims[0].name} (аватар: ${data.victims[0].avatarId ? avatarRu(data.victims[0].avatarId) : '—'}), роль: ${data.victims[0].roleName}. Назови имя и роль, пошути про аватар.`);
-      else if (n === 2 && data.victims?.length === 2) parts.push(`Две жертвы: ${data.victims[0].name} — ${data.victims[0].roleName}, ${data.victims[1].name} — ${data.victims[1].roleName}. Назови обоих по имени и роли, с юмором.`);
-      if (data.savedByName) parts.push(`Доктор спас: ${data.savedByName}.`);
-      if (data.veteranSavedHimself) parts.push('Ветеран защитился этой ночью.');
-      if (data.detectiveCheckedName != null) parts.push(`Детектив проверил ${data.detectiveCheckedName}: ${data.detectiveWasMafia ? 'мафия' : 'мирный'}.`);
-      parts.push(`Раунд ${data.round || 1}.`);
-      base = `Итог ночи. ${parts.join(' ')} Своими словами, без цензуры. Одна-три фразы. Обсуждение объявишь отдельно.`;
+      const outcomeLine = buildNightOutcomeLine(data);
+      base = `Единственный факт этой ночи (озвучь именно его, не придумывай другой исход): ${outcomeLine}\n\nРаунд ${data.round || 1}. Своими словами, в своём стиле, добавь тон (шутку/драму). Скажи по-своему, не шаблонно; можно начать с паузы или междометия. Одна-три фразы. Обсуждение объявишь отдельно. Упоминай только имена и факты из этого сообщения.`;
       break;
     }
     case 'day_discussion':
@@ -271,7 +286,7 @@ function userMessage(type, data = {}) {
       break;
     case 'vote_result_summary': {
       const exclRu = data.excludedAvatarId ? avatarRu(data.excludedAvatarId) : null;
-      base = `Город прощается с ${data.excludedName}${exclRu ? ` (аватар: ${exclRu})` : ''}. Раскрой роль: ${data.excludedRole || 'игрок'}. Пошути про аватар и роль. С характером, без цензуры. Одна-две фразы.`;
+      base = `Город прощается с ${data.excludedName}${exclRu ? ` (аватар: ${exclRu})` : ''}. Раскрой роль: ${data.excludedRole || 'игрок'}. Пошути про аватар и роль. Скажи по-своему, не шаблонно; можно начать с паузы или междометия. С характером, без цензуры. Одна-две фразы.`;
       break;
     }
     case 'game_end_summary': {
@@ -284,7 +299,7 @@ function userMessage(type, data = {}) {
         const avatarRuName = p.avatarId ? avatarRu(p.avatarId) : null;
         return `${p.name}${avatarRuName ? ` (${avatarRuName})` : ''} — ${ROLE_NAMES[p.role] || p.role}`;
       }).join('; ');
-      base = `Расклад: ${list}. Огласи кто кем был — обыгрывай аватары в шутках, без цензуры, с юмором и матом где уместно. Две-три фразы, чтобы было смешно.`;
+      base = `Расклад: ${list}. Огласи кто кем был — обыгрывай аватары в шутках, без цензуры, с юмором и матом где уместно. Скажи по-своему, не шаблонно; можно начать с паузы или междометия. Две-три фразы, чтобы было смешно.`;
       break;
     }
     case 'night_nudge_mafia':
@@ -307,6 +322,9 @@ function userMessage(type, data = {}) {
       break;
     default:
       base = 'Одна короткая реплика ведущего — живой русский, можно с юмором или стёбом.';
+  }
+  if (data.gameContext && typeof data.gameContext === 'string' && data.gameContext.trim()) {
+    base = `Контекст игры: ${data.gameContext.trim()}\n\n${base}`;
   }
   return appendRecentHostLines(base, data);
 }
@@ -348,7 +366,7 @@ export async function getHostLine(type, data = {}) {
   const systemPrompt = STYLE_TO_PROMPT[style];
   const temperature = (style === 'strict' || style === 'calm') ? 0.6 : 0.85;
 
-  const maxTokens = SUMMARY_TYPES.includes(type) ? 250 : 140;
+  const maxTokens = SUMMARY_TYPES.includes(type) ? 280 : 140;
   const timeoutMs = SUMMARY_TYPES.includes(type) ? AI_SUMMARY_TIMEOUT_MS : AI_TIMEOUT_MS;
 
   const controller = new AbortController();

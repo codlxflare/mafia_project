@@ -45,6 +45,7 @@ export default function App() {
   const [reactions, setReactions] = useState([]);
   const [excludedForLastWords, setExcludedForLastWords] = useState(null);
   const [voteCounts, setVoteCounts] = useState({});
+  const [mafiaVotesSummary, setMafiaVotesSummary] = useState([]);
   const [hostAnnouncedDay, setHostAnnouncedDay] = useState(false);
   const [hostAnnouncedNightStep, setHostAnnouncedNightStep] = useState(null);
   const [speakHost, setSpeakHost] = useState(true);
@@ -330,6 +331,7 @@ export default function App() {
         setNightStep(null);
         setNightTurn(null);
         setHostAnnouncedNightStep(null);
+        setMafiaVotesSummary([]);
       }
       if (p === 'night' || p === 'ended') setReactions([]);
       if (p === 'night' || p === 'ended') setExcludedForLastWords(null);
@@ -360,7 +362,9 @@ export default function App() {
       log('night_turn_end', data?.step);
       if (nightTurnRef.current?.step === data?.step) setNightTurn(null);
       setHostAnnouncedNightStep(null);
+      if (data?.step === 'mafia' || data?.step === 'don_decides') setMafiaVotesSummary([]);
     });
+    socket.on('mafia_votes', (data) => setMafiaVotesSummary(data?.votesByTarget || []));
     socket.on('your_role', (role) => {
       log('your_role received');
       setRole(role);
@@ -388,6 +392,7 @@ export default function App() {
       socket.off('night_step', onNightStep);
       socket.off('night_turn');
       socket.off('night_turn_end');
+      socket.off('mafia_votes');
       socket.off('your_role');
       socket.off('day_started');
       socket.off('round');
@@ -521,6 +526,7 @@ export default function App() {
       reactions={reactions}
       excludedForLastWords={excludedForLastWords}
       voteCounts={voteCounts}
+      mafiaVotesSummary={mafiaVotesSummary}
       hostAnnouncedDay={hostAnnouncedDay}
       hostAnnouncedNightStep={hostAnnouncedNightStep}
       speakHost={speakHost}

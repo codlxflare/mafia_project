@@ -41,6 +41,7 @@ export default function Game({
   reactions = [],
   excludedForLastWords,
   voteCounts = {},
+  mafiaVotesSummary = [],
   hostAnnouncedDay = false,
   hostAnnouncedNightStep = null,
   speakHost,
@@ -388,8 +389,8 @@ export default function Game({
           Вы выбыли. Следите за игрой и не выдавайте роли.
         </div>
       )}
-      {isDead && excludedForLastWords?.playerId && excludedForLastWords.playerId !== playerId && (
-        <div className="you-dead">
+      {excludedForLastWords && excludedForLastWords.playerId !== playerId && (
+        <div className={isDead ? 'you-dead' : 'last-words-wait'}>
           Ожидание последнего слова исключённого ({excludedForLastWords.excludedName})…
         </div>
       )}
@@ -405,6 +406,11 @@ export default function Game({
           {mafiaRevoteSec != null && mafiaRevoteSec > 0 && (
             <p className="night-choice-hint" style={{ marginBottom: 8 }}>Переголосование: {mafiaRevoteSec} с</p>
           )}
+          {mafiaVotesSummary.length > 0 && (
+            <p className="night-choice-hint mafia-votes-summary">
+              Голоса: {mafiaVotesSummary.map((v) => `за ${v.name || '—'} — ${v.count}`).join(', ')}
+            </p>
+          )}
           <h3 className="night-choice-title">Выберите жертву</h3>
           {myChoice?.id != null ? (
             <div className="choice-confirm">
@@ -418,6 +424,11 @@ export default function Game({
       )}
       {phase === 'night' && nightTurn?.step === 'don_decides' && !isDead && nightChoiceAllowed && (
         <div className="night-choice night-choice--mafia night-choice--table-only">
+          {mafiaVotesSummary.length > 0 && (
+            <p className="night-choice-hint mafia-votes-summary">
+              Голоса: {mafiaVotesSummary.map((v) => `за ${v.name || '—'} — ${v.count}`).join(', ')}
+            </p>
+          )}
           <h3 className="night-choice-title">Дон решает при ничьей</h3>
           {myChoice?.id != null ? (
             <div className="choice-confirm">
@@ -529,7 +540,7 @@ export default function Game({
           </div>
         </div>
       )}
-      {phase === 'voting' && isAliveForVote && !isDead && (
+      {phase === 'voting' && !excludedForLastWords && isAliveForVote && !isDead && (
         <div className="vote-block vote-block--enter vote-block--voting">
           <h3 className="vote-block-title">
             {voteTieFavorites?.length ? 'Переголосование: только между фаворитами' : 'Голосование: кого исключить?'}

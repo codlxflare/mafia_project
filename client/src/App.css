@@ -1140,6 +1140,15 @@
   color: #e8b84a;
   letter-spacing: 0.05em;
 }
+.last-words-wait {
+  background: var(--surface);
+  border: var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin: 12px 0;
+  color: var(--muted);
+  text-align: center;
+}
 .vote-block--voting .player-list { margin-top: 4px; }
 @keyframes blockEnter {
   from {
