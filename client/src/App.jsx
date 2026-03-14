@@ -460,13 +460,16 @@ export default function App() {
     setPlayerName(displayName);
     socket.emit('join_room', { code: trimmedCode, playerName: displayName }, (res) => {
       if (res?.error) {
-        if (res.error === 'Игра уже идёт') {
+        const isGameAlreadyStarted = res.error === 'Игра уже идёт' || (typeof res.error === 'string' && res.error.includes('Игра уже'));
+        if (isGameAlreadyStarted) {
+          setHomeError('Возвращаем в игру…');
           socket.emit('rejoin_room', { code: trimmedCode, playerName: displayName }, (rejoinRes) => {
             setJoiningRoom(false);
             if (rejoinRes?.error) {
               setHomeError(rejoinRes.error);
               return;
             }
+            setHomeError(null);
             setRoomCode(trimmedCode);
             setPlayerId(rejoinRes.playerId);
             setIsCreator(!!rejoinRes.isCreator);
