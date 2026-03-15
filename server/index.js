@@ -4,7 +4,7 @@ import path from 'path';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { assignRoles, checkWin, getAlivePlayers, getAliveMafia, isMafiaForDetective, ROLES, MIN_PLAYERS } from './gameLogic.js';
+import { assignRoles, checkWin, getAlivePlayers, getAliveMafia, isMafiaForDetective, ROLES, MIN_PLAYERS, MAX_PLAYERS } from './gameLogic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
@@ -792,7 +792,7 @@ io.on('connection', (socket) => {
       cb({ error: 'Игра уже идёт' });
       return;
     }
-    if (room.playerIds.length >= 12) {
+    if (room.playerIds.length >= MAX_PLAYERS) {
       cb({ error: 'Комната заполнена' });
       return;
     }
@@ -1046,6 +1046,10 @@ io.on('connection', (socket) => {
       return;
     }
     const roles = assignRoles(room.playerIds);
+    if (!roles) {
+      log('Server', 'start_game IGNORED (assignRoles returned null)');
+      return;
+    }
     room.voteHistory = [];
     room.battleLog = [];
     room.gameState = {

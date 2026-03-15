@@ -6,7 +6,7 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
   const playerNames = room?.playerNames || {};
   const playerAvatars = room?.playerAvatars || {};
   const count = playerIds.length;
-  const canStart = count >= 4;
+  const canStart = count >= 5;
   const timerSec = room?.discussionTimerSec ?? 120;
   const turnSec = room?.discussionTurnSec ?? 60;
   const voiceStyle = room?.hostVoiceStyle ?? 'funny';
@@ -98,7 +98,7 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
       <p className="lobby-mode-hint" title="5: мафия, доктор, детектив, 2 мирных. 6: + дон. 7: 2 мафии, доктор, детектив, 3 мирных. 8+: 2 мафии, дон, доктор, детектив, мирные.">
         5–12 игроков. Роли: мафия, дон (6+), доктор, детектив, мирные.
       </p>
-      {!canStart && <p className="need">Нужно минимум 4 человека</p>}
+      {!canStart && <p className="need">Нужно минимум 5 человек</p>}
       {isCreator && canStart && (
         <button className="btn primary start" onClick={onStartGame} disabled={startingGame}>
           {startingGame ? 'Запуск…' : 'Начать игру'}

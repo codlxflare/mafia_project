@@ -115,6 +115,17 @@ const ROLE_NAMES = {
   journalist: 'журналист',
 };
 
+/** Детерминированная реплика расклада ролей (финал). */
+function buildRevealLine(rolesReveal) {
+  if (!Array.isArray(rolesReveal) || rolesReveal.length === 0) return 'Сейчас раскрою, кто кем был.';
+  const parts = (rolesReveal || []).map((p) => {
+    const avatarRuName = p.avatarId ? avatarRu(p.avatarId) : null;
+    const roleName = ROLE_NAMES[p.role] || p.role;
+    return `${p.name}${avatarRuName ? ` (${avatarRuName})` : ''} — ${roleName}`;
+  });
+  return `Кто кем был: ${parts.join('; ')}.`;
+}
+
 const FALLBACK = {
   lobby_waiting: (count, need) => `Пока нас ${count} из ${need}. Ждём остальных.`,
   lobby_ready: (need) => `Все в сборе — ${need}. Погнали.`,
@@ -158,7 +169,7 @@ const FALLBACK = {
   player_excluded_announce: (d) => `Город исключил ${d.excludedName}. Последнее слово — ${d.lastWordsSec ?? 20} секунд.`,
   vote_result_summary: (d) => `Город исключил ${d.excludedName}.`,
   game_end_summary: (d) => (d.winner === 'mafia' ? 'Мафия победила.' : 'Мирные победили.'),
-  game_end_reveal: () => 'Сейчас раскрою, кто кем был.',
+  game_end_reveal: (d) => buildRevealLine(d.rolesReveal),
   night_nudge_mafia: () => 'Мафия, ваш выбор?',
   night_nudge_doctor: () => 'Доктор, кого спасаем?',
   night_nudge_detective: () => 'Детектив, кого проверить?',
@@ -196,6 +207,7 @@ function fallbackText(type, data = {}) {
     if (type === 'night_summary') return v(data);
     if (type === 'vote_result_summary') return v(data);
     if (type === 'game_end_summary') return v(data);
+    if (type === 'game_end_reveal') return v(data);
     if (type === 'roles_done') return v(data);
     if (type === 'rules_explanation') return v();
     if (type === 'day_discussion') return v(data);
@@ -333,7 +345,7 @@ function userMessage(type, data = {}) {
     }
     case 'game_end_summary': {
       const who = data.winner === 'mafia' ? 'мафия' : 'мирные';
-      base = `Игра окончена. Победили ${who}. Скажи это с характером. Роли раскроешь в следующей реплике.`;
+      base = `Игра окончена. Победили ${who}. Одна короткая реплика с характером — только объяви победителя. Роли не называй, их огласишь в следующей фразе.`;
       break;
     }
     case 'game_end_reveal': {
@@ -341,7 +353,7 @@ function userMessage(type, data = {}) {
         const avatarRuName = p.avatarId ? avatarRu(p.avatarId) : null;
         return `${p.name}${avatarRuName ? ` (${avatarRuName})` : ''} — ${ROLE_NAMES[p.role] || p.role}`;
       }).join('; ');
-      base = `Расклад: ${list}. Огласи кто кем был — обыгрывай аватары в шутках, без цензуры. Скажи по-своему.`;
+      base = `В предыдущей реплике ты уже объявил победителя. Сейчас ТОЛЬКО огласи расклад ролей: ${list}. Не повторяй итог игры, не говори «игра окончена» или «победила мафия». Одна реплика: кто какую роль играл — можно обыграть аватары.`;
       break;
     }
     case 'night_nudge_mafia':
@@ -433,6 +445,14 @@ export async function getHostLine(type, data = {}) {
     let text = j.choices?.[0]?.message?.content?.trim();
     if (!text || text.length === 0) return fallbackText(type, data);
     text = postProcessHostLine(text, { victimCount: data.victimCount });
+    if (type === 'game_end_reveal') {
+      const summaryLike = /игра\s+окончена|роли\s+раскроем|в\s+следующей\s+реплике|победил[аи]\s+мафия|победили\s+мирные/i.test(text);
+      const hasReveal = (data.rolesReveal || []).some((p) => {
+        const roleRu = ROLE_NAMES[p.role] || p.role;
+        return text.includes(`— ${roleRu}`) || (text.includes(p.name) && text.includes(roleRu));
+      });
+      if (summaryLike && !hasReveal) text = buildRevealLine(data.rolesReveal);
+    }
     return text.length > 0 ? text : fallbackText(type, data);
   } catch (e) {
     clearTimeout(timeoutId);
