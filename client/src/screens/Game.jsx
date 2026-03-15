@@ -57,10 +57,12 @@ export default function Game({
   soundEffects = true,
   setSoundEffects,
   playTurnSound,
+  showEnteringRoom = false,
 }) {
   const [detectiveResult, setDetectiveResult] = useState(null);
   const [roleCardDismissed, setRoleCardDismissed] = useState(false);
   const [introCutsceneDone, setIntroCutsceneDone] = useState(false);
+  const [enteringRoomSkipped, setEnteringRoomSkipped] = useState(false);
   const [myChoice, setMyChoice] = useState(null);
   const [myVote, setMyVote] = useState(null);
   const [discussionSecondsLeft, setDiscussionSecondsLeft] = useState(null);
@@ -90,6 +92,7 @@ export default function Game({
     nightStepRef.current = step;
   }, [nightTurn?.step]);
   useEffect(() => { if (phase !== 'voting') setMyVote(null); }, [phase]);
+  useEffect(() => { if (phase !== 'roles') setEnteringRoomSkipped(false); }, [phase]);
   useEffect(() => { if (phase === 'voting') setVotingStarting(false); }, [phase]);
   const hadTieFavoritesRef = useRef(false);
   const prevTieBreakSecRef = useRef(null);
@@ -318,18 +321,18 @@ export default function Game({
     phase === 'day' && hostAnnouncedDay && 'game--with-discussion',
   ].filter(Boolean).join(' ');
 
-  const showIntroCutscene = (phase === 'roles' || phase === 'roles_done') && !introCutsceneDone;
+  const showEnteringRoomScreen = showEnteringRoom && !enteringRoomSkipped;
 
   return (
     <div className={`screen game ${phaseClass}`.trim()}>
-      {showIntroCutscene && (
-        <div className="intro-cutscene intro-cutscene--enter" onClick={() => setIntroCutsceneDone(true)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setIntroCutsceneDone(true)} aria-label="Пропустить катсцену">
+      {showEnteringRoomScreen && (
+        <div className="intro-cutscene intro-cutscene--enter" onClick={() => setEnteringRoomSkipped(true)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setEnteringRoomSkipped(true)} aria-label="Пропустить">
           <div className="intro-cutscene-backdrop" />
           <div className="intro-cutscene-content" onClick={(e) => e.stopPropagation()}>
             <p className="intro-cutscene-title">Игроки входят в комнату</p>
             <p className="intro-cutscene-subtitle">и занимают места за столом</p>
             <div className="intro-cutscene-progress" aria-hidden />
-            <button type="button" className="intro-cutscene-skip btn secondary small" onClick={() => setIntroCutsceneDone(true)}>Пропустить</button>
+            <button type="button" className="intro-cutscene-skip btn secondary small" onClick={() => setEnteringRoomSkipped(true)}>Пропустить</button>
           </div>
         </div>
       )}

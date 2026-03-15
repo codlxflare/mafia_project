@@ -61,6 +61,7 @@ export default function App() {
   const [joiningRoom, setJoiningRoom] = useState(false);
   const [startingGame, setStartingGame] = useState(false);
   const [copyToast, setCopyToast] = useState(false);
+  const [hostSaidGameStart, setHostSaidGameStart] = useState(false);
   const speakHostRef = useRef(false);
   const soundEffectsRef = useRef(true);
   const isCreatorRef = useRef(false);
@@ -374,7 +375,10 @@ export default function App() {
 
   useEffect(() => {
     if (!socket) return;
-    const onHostSays = (payload) => addHostLineRef.current?.(payload);
+    const onHostSays = (payload) => {
+      addHostLineRef.current?.(payload);
+      if (payload?.type === 'game_start') setHostSaidGameStart(true);
+    };
     const dropDayVotingFromTtsQueue = () => {
       const q = ttsQueueRef.current;
       const drop = new Set(['vote_start', 'day_discussion', 'vote_counting']);
@@ -404,8 +408,10 @@ export default function App() {
     socket.on('room_updated', setRoom);
     socket.on('game_started', (data) => {
       log('game_started');
+      setHostSaidGameStart(false);
       setStartingGame(false);
       setScreen('game');
+      setPhase(data?.phase || 'roles');
       setRoundIndex(data?.roundIndex ?? 1);
       setNightStep(null);
       setNightTurn(null);
@@ -667,6 +673,7 @@ export default function App() {
       soundEffects={soundEffects}
       setSoundEffects={setSoundEffects}
       playTurnSound={playTurnSound}
+      showEnteringRoom={phase === 'roles' && !hostSaidGameStart}
     />
     </>
   );
