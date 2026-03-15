@@ -231,6 +231,8 @@ async function mafiaRevoteAndResolve(io, code) {
   const room = rooms.get(code);
   if (!room?.gameState) return null;
   room.gameState.nightChoices.mafiaVotes = {};
+  room.gameState.currentNightStep = 'mafia';
+  io.to(code).emit('night_step', 'mafia');
   io.to(code).emit('mafia_tie_revote', { secondsLeft: MAFIA_REVOTE_SEC });
   await delay(MAFIA_REVOTE_SEC * 1000);
   const r = rooms.get(code);
@@ -428,6 +430,7 @@ async function runNightSequence(io, code) {
             const choice = rAfterMafia.gameState.nightChoices.donMafiaChoice;
             mafiaVictimId = choice && al.includes(choice) ? choice : null;
           }
+          await say('night_don_decides_chose', { voiceStyle: rAfterMafia.hostVoiceStyle });
           await delay(DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS);
           emitNightTurnEnd(io, code, 'don_decides');
         }
@@ -446,6 +449,7 @@ async function runNightSequence(io, code) {
   emitNightTurnEnd(io, code, 'mafia');
   room.gameState.currentNightStep = null;
   io.to(code).emit('night_step', null);
+  await say('night_mafia_chose', { voiceStyle: room.hostVoiceStyle });
   await sayTransition('night_mafia_sleep');
 
   const needDonCheck = getAlivePlayers(room.gameState).some((id) => room.gameState.roles[id] === ROLES.don);
@@ -469,6 +473,7 @@ async function runNightSequence(io, code) {
     emitNightTurnEnd(io, code, 'don_check');
     room.gameState.currentNightStep = null;
     io.to(code).emit('night_step', null);
+    await say('night_don_check_chose', { voiceStyle: room.hostVoiceStyle });
     await sayTransition('night_don_check_sleep');
   }
 
@@ -484,6 +489,7 @@ async function runNightSequence(io, code) {
     emitNightTurnEnd(io, code, 'doctor');
     room.gameState.currentNightStep = null;
     io.to(code).emit('night_step', null);
+    await say('night_doctor_chose');
     await sayTransition('night_doctor_sleep');
   }
 
@@ -499,6 +505,7 @@ async function runNightSequence(io, code) {
     emitNightTurnEnd(io, code, 'detective');
     room.gameState.currentNightStep = null;
     io.to(code).emit('night_step', null);
+    await say('night_detective_chose');
     await sayTransition('night_detective_sleep');
   }
 

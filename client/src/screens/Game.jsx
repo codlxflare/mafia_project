@@ -85,7 +85,7 @@ export default function Game({
   useEffect(() => { if (nightTurn?.step !== 'don_check') setDonResult(null); }, [nightTurn?.step]);
   useEffect(() => {
     const step = nightTurn?.step;
-    if (step === 'don_check' && (nightStepRef.current === 'mafia' || nightStepRef.current === 'don_decides')) setMyChoice(null);
+    if (step === 'don_check' && nightStepRef.current !== 'don_check') setMyChoice(null);
     nightStepRef.current = step;
   }, [nightTurn?.step]);
   useEffect(() => { if (phase !== 'voting') setMyVote(null); }, [phase]);
@@ -657,6 +657,8 @@ export default function Game({
         onSelectPlayer={tableOnSelect}
         detectiveCheckPlayerId={detectiveResult != null && myChoice?.id ? myChoice.id : null}
         detectiveCheckIsMafia={detectiveResult?.isMafia}
+        donCheckPlayerId={donResult?.targetId ?? null}
+        donCheckIsDetective={donResult?.isDetective}
         voteCounts={voteCounts}
         mafiaVoteCountsByTarget={mafiaVoteCountsByTarget}
         mafiaTargetId={mafiaTargetId}
@@ -683,6 +685,8 @@ function GameTable({
   onSelectPlayer = null,
   detectiveCheckPlayerId = null,
   detectiveCheckIsMafia = null,
+  donCheckPlayerId = null,
+  donCheckIsDetective = null,
   voteCounts = {},
   mafiaVoteCountsByTarget = {},
   mafiaTargetId = null,
@@ -738,6 +742,7 @@ function GameTable({
             const selectable = isSelectable(id);
             const chosen = chosenPlayerId === id;
             const showDetectiveCheck = detectiveCheckPlayerId === id;
+            const showDonCheck = donCheckPlayerId === id;
             const votesForSeat = phase === 'voting' ? voteCounts[id] : mafiaVoteCountsByTarget[id];
             const showVoteCount = votesForSeat != null && votesForSeat > 0;
             const isMafiaTarget = mafiaTargetId != null && mafiaTargetId === id;
@@ -780,6 +785,14 @@ function GameTable({
                       <span className="game-table-seat-check-icon">{detectiveCheckIsMafia ? '🎩' : '✓'}</span>
                       <span className="game-table-seat-check-text">
                         {detectiveCheckIsMafia ? 'Мафиози' : 'Мирный. Не попал — думай лучше.'}
+                      </span>
+                    </span>
+                  )}
+                  {showDonCheck && (
+                    <span className={`game-table-seat-check game-table-seat-check--${donCheckIsDetective ? 'detective' : 'civilian'}`} role="status">
+                      <span className="game-table-seat-check-icon">{donCheckIsDetective ? '🔍' : '—'}</span>
+                      <span className="game-table-seat-check-text">
+                        {donCheckIsDetective ? 'Детектив' : 'Не детектив'}
                       </span>
                     </span>
                   )}

@@ -123,13 +123,18 @@ const FALLBACK = {
   night_mafia_wake: () => 'Мафия, проснитесь. Выберите жертву.',
   night_mafia_sleep: () => 'Мафия, засыпайте.',
   night_mafia_tie: () => 'Мафия не смогла определиться. Переголосование — 10 секунд.',
+  night_mafia_chose: () => 'Мафия сделала выбор.',
   night_don_decides: () => 'Дон, решай — кого убираем? Или никого.',
+  night_don_decides_chose: () => 'Дон сделал выбор.',
   night_don_check_wake: () => 'Дон, проснись. Проверь одного игрока — детектив он или нет.',
   night_don_check_sleep: () => 'Дон, засыпай.',
+  night_don_check_chose: () => 'Дон сделал выбор.',
   night_doctor_wake: () => 'Доктор, твоя смена. Кого спасаем?',
   night_doctor_sleep: () => 'Доктор, засыпай.',
+  night_doctor_chose: () => 'Доктор сделал выбор.',
   night_detective_wake: () => 'Детектив, твоя очередь. Кого проверить?',
   night_detective_sleep: () => 'Детектив, засыпай.',
+  night_detective_chose: () => 'Детектив сделал выбор.',
   night_morning: () => 'Рассвет. Все открывают глаза.',
   night_summary: (d) => nightSummaryFallback(d),
   day_discussion: (d) => `День ${d.round || 1}. Обсуждение — высказывайтесь.`,
@@ -183,6 +188,7 @@ function fallbackText(type, data = {}) {
     if (type === 'player_joined') return v(data.playerName);
     if (['night_close_eyes', 'night_mafia_wake'].includes(type)) return v(data.round);
     if (type === 'night_mafia_tie') return v();
+    if (['night_mafia_chose', 'night_don_decides_chose', 'night_don_check_chose', 'night_doctor_chose', 'night_detective_chose'].includes(type)) return v();
     if (type === 'vote_tie_break') return v();
     if (type.startsWith('night_nudge_')) return v();
     return v();
@@ -244,8 +250,14 @@ function userMessage(type, data = {}) {
     case 'night_mafia_tie':
       base = 'Мафия не смогла определиться — ничья. Объяви переголосование: 10 секунд.';
       break;
+    case 'night_mafia_chose':
+      base = 'Скажи коротко, что мафия сделала выбор (без повторения «проснитесь»). Одна фраза.';
+      break;
     case 'night_don_decides':
       base = 'Дон просыпается. При ничьей мафии за ним последнее слово — выбери жертву или никого.';
+      break;
+    case 'night_don_decides_chose':
+      base = 'Скажи коротко, что дон сделал выбор. Одна фраза.';
       break;
     case 'night_don_check_wake':
       base = 'Дон просыпается отдельно. Можешь проверить одного игрока — детектив он или нет. Только проверка, без убийства. Не говори мафии засыпать — они уже получили команду.';
@@ -253,17 +265,26 @@ function userMessage(type, data = {}) {
     case 'night_don_check_sleep':
       base = 'Дон засыпает. Коротко.';
       break;
+    case 'night_don_check_chose':
+      base = 'Скажи коротко, что дон сделал выбор (проверку). Одна фраза.';
+      break;
     case 'night_doctor_wake':
       base = 'Доктор, твоя смена. Кого спасаем этой ночью?';
       break;
     case 'night_doctor_sleep':
       base = 'Доктор засыпает. Коротко.';
       break;
+    case 'night_doctor_chose':
+      base = 'Скажи коротко, что доктор сделал выбор. Одна фраза.';
+      break;
     case 'night_detective_wake':
       base = 'Детектив, твоя очередь. Кого проверить?';
       break;
     case 'night_detective_sleep':
       base = 'Детектив засыпает. Коротко.';
+      break;
+    case 'night_detective_chose':
+      base = 'Скажи коротко, что детектив сделал выбор. Одна фраза.';
       break;
     case 'night_morning':
       base = 'Скажи только: рассвет, все открывают глаза. Не объявляй итог ночи, не говори кто погиб, не говори что ночь прошла хорошо или спокойно — итог будет объявлен отдельно в следующей реплике. Одна короткая нейтральная фраза.';

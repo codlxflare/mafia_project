@@ -1733,6 +1733,12 @@
   border: 1px solid rgba(120, 220, 150, 0.4);
   box-shadow: 0 4px 16px rgba(40, 120, 80, 0.3);
 }
+.game-table-seat-check--detective {
+  background: linear-gradient(135deg, rgba(40, 60, 120, 0.95), rgba(25, 45, 90, 0.95));
+  color: #d0e0ff;
+  border: 1px solid rgba(100, 150, 220, 0.4);
+  box-shadow: 0 4px 16px rgba(50, 80, 150, 0.3);
+}
 @keyframes checkBadge {
   from {
     opacity: 0;
