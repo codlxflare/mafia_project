@@ -583,13 +583,15 @@ async function runNightSequence(io, code) {
       excludedName: v.tie ? null : r.playerNames[v.excludedId],
       tie: v.tie,
     }));
-    io.to(code).emit('game_ended', {
+    const gameEndPayload = {
       winner: win,
       roles: r.gameState.roles,
       playerNames: r.playerNames,
       voteHistory: voteHistoryForClient,
       battleLog: r.battleLog || [],
-    });
+    };
+    r.gameEndResult = gameEndPayload;
+    io.to(code).emit('game_ended', gameEndPayload);
     log('Server', 'runNightSequence DONE -> ended (win after night)', 'winner=', win);
     return;
   }
@@ -652,6 +654,8 @@ function clearDiscussionTurnTimeout(room) {
     clearTimeout(room.discussionTurnTimeout);
     room.discussionTurnTimeout = null;
   }
+  delete room?._currentDiscussionTurn;
+  delete room?._currentDiscussionTurnEndTime;
 }
 
 /** По очереди даёт слово каждому живому игроку на обсуждении; при start_voting таймер очищается. */
@@ -664,9 +668,13 @@ function scheduleNextDiscussionTurn(io, code) {
   const playerId = alive[idx % alive.length];
   const playerName = room.playerNames[playerId] || 'Игрок';
   const turnSec = room.discussionTurnSec ?? 60;
+  room._currentDiscussionTurn = { playerId, playerName, turnSec };
+  room._currentDiscussionTurnEndTime = Date.now() + turnSec * 1000;
   io.to(code).emit('discussion_turn_start', { playerId, playerName, turnSec });
   room.discussionTurnTimeout = setTimeout(() => {
     room.discussionTurnTimeout = null;
+    delete room._currentDiscussionTurn;
+    delete room._currentDiscussionTurnEndTime;
     io.to(code).emit('discussion_turn_end', { playerId });
     room.discussionTurnIndex = idx + 1;
     scheduleNextDiscussionTurn(io, code);
@@ -911,6 +919,50 @@ io.on('connection', (socket) => {
       const payload = { step: roleKey, round: room.gameState.roundIndex ?? 1, aliveIds: alive };
       if (roleKey === 'doctor') payload.doctorCanHealSelf = !room.gameState.doctorSelfHealed;
       socket.emit('night_turn', payload);
+    }
+    if (room.phase === 'day' || room.phase === 'voting') {
+      const alive = getAlivePlayers(room.gameState);
+      socket.emit('day_started', {
+        killed: null,
+        killedIds: [],
+        alive,
+        roundIndex: room.gameState.roundIndex ?? 1,
+        discussionTimerSec: room.discussionTimerSec ?? 120,
+        discussionTurnSec: room.discussionTurnSec ?? 60,
+      });
+    }
+    if (room.phase === 'voting' && room.votes && Object.keys(room.votes).length > 0) {
+      const alive = getAlivePlayers(room.gameState);
+      const canVote = room.voteTieFavorites?.length
+        ? alive.filter((id) => !room.voteTieFavorites.includes(id))
+        : alive;
+      const counts = {};
+      Object.entries(room.votes).forEach(([voterId, target]) => {
+        if (canVote.includes(voterId) && alive.includes(target)) {
+          counts[target] = (counts[target] || 0) + 1;
+        }
+      });
+      socket.emit('vote_counts', { counts: { ...counts } });
+    }
+    if (room.phase === 'day' || room.phase === 'voting') {
+      socket.emit('host_announced', 'day');
+      if (room.phase === 'day' && room._currentDiscussionTurn) {
+        const t = room._currentDiscussionTurn;
+        const secLeft = room._currentDiscussionTurnEndTime != null
+          ? Math.max(1, Math.ceil((room._currentDiscussionTurnEndTime - Date.now()) / 1000))
+          : t.turnSec;
+        socket.emit('discussion_turn_start', { playerId: t.playerId, playerName: t.playerName, turnSec: secLeft });
+      }
+    }
+    if (room.phase === 'voting' && room.voteTieFavorites?.length && room._voteTieBreakEndTime != null) {
+      const secLeft = Math.max(0, Math.ceil((room._voteTieBreakEndTime - Date.now()) / 1000));
+      socket.emit('vote_tie_break', { secondsLeft: secLeft });
+    }
+    if (room.phase === 'voting' && room._excludedForLastWords) {
+      socket.emit('player_excluded', room._excludedForLastWords);
+    }
+    if (room.phase === 'ended' && room.gameEndResult) {
+      socket.emit('game_ended', room.gameEndResult);
     }
   });
 
@@ -1219,16 +1271,19 @@ io.on('connection', (socket) => {
         pushHostLine(r, line);
         await delay(speechDurationMs(line));
         io.to(code).emit('vote_counts', { counts: {} });
+        r._voteTieBreakEndTime = Date.now() + VOTE_TIE_BREAK_SEC * 1000;
         io.to(code).emit('vote_tie_break', { secondsLeft: VOTE_TIE_BREAK_SEC });
         await delay(VOTE_TIE_BREAK_SEC * 1000);
         const r2 = rooms.get(code);
         if (!r2?.gameState || r2.phase !== 'voting') return;
+        delete r2._voteTieBreakEndTime;
         r2.votes = {};
         r2.voteCountingStarted = false;
         io.to(code).emit('room_updated', roomForClient(r2));
         io.to(code).emit('phase', 'voting');
         return;
       }
+      delete r._voteTieBreakEndTime;
       r.voteTieFavorites = null;
       if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId: null, tie: true });
       const line = await getHostLine('vote_tie', { voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
@@ -1248,14 +1303,18 @@ io.on('connection', (socket) => {
     r.gameState.dead.add(excludedId);
     const excludedName = r.playerNames[excludedId];
     const excludedRole = r.gameState.roles[excludedId];
+    delete r._voteTieBreakEndTime;
     r.voteTieFavorites = null;
     if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId, tie: false });
     if (r.battleLog) r.battleLog.push({ type: 'vote_excluded', round: r.gameState.roundIndex ?? 1, excludedName });
     io.to(code).emit('room_updated', roomForClient(r));
     const LAST_WORDS_MS = readDelay('MAFIA_LAST_WORDS_MS', 20000);
-    io.to(code).emit('player_excluded', { playerId: excludedId, excludedName, lastWordsSec: Math.round(LAST_WORDS_MS / 1000) });
+    const lastWordsSec = Math.round(LAST_WORDS_MS / 1000);
+    r._excludedForLastWords = { playerId: excludedId, excludedName, lastWordsSec };
+    io.to(code).emit('player_excluded', { playerId: excludedId, excludedName, lastWordsSec });
     await delay(LAST_WORDS_MS);
     clearDiscussionTurnTimeout(r);
+    delete r._excludedForLastWords;
     await delay(HOST_PAUSE_BEFORE_MS);
     const voteLine = await getHostLine('vote_result_summary', {
       excludedName,
@@ -1297,13 +1356,15 @@ io.on('connection', (socket) => {
         excludedName: v.tie ? null : r.playerNames[v.excludedId],
         tie: v.tie,
       }));
-      io.to(code).emit('game_ended', {
+      const gameEndPayload = {
         winner: win,
         roles: r.gameState.roles,
         playerNames: r.playerNames,
         voteHistory: voteHistoryForClient,
         battleLog: r.battleLog || [],
-      });
+      };
+      r.gameEndResult = gameEndPayload;
+      io.to(code).emit('game_ended', gameEndPayload);
     } else {
       clearDiscussionTurnTimeout(r);
       r.phase = 'night';
@@ -1353,6 +1414,8 @@ io.on('connection', (socket) => {
     if (!room || room.creatorId !== socket.id || room.phase !== 'ended') return;
     room.phase = 'lobby';
     room.gameState = null;
+    room.gameEndResult = null;
+    room._excludedForLastWords = null;
     room.disconnectedIds = null;
     room.hostRecentLines = [];
     room.voteHistory = [];

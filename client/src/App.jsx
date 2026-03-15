@@ -92,6 +92,13 @@ export default function App() {
     if (phase !== 'voting') setTieBreakSecondsLeft(null);
   }, [phase]);
   useEffect(() => {
+    if ((phase !== 'day' && phase !== 'voting') || !room?.playerIds) return;
+    const dead = room.gameState?.dead || [];
+    if (Array.isArray(dead) && alive.length === 0 && room.playerIds.length > 0) {
+      setAlive(room.playerIds.filter((id) => !dead.includes(id)));
+    }
+  }, [phase, room?.playerIds, room?.gameState?.dead, alive.length]);
+  useEffect(() => {
     if (tieBreakSecondsLeft == null || tieBreakSecondsLeft <= 0) return;
     const t = setInterval(() => setTieBreakSecondsLeft((s) => (s <= 0 ? null : s - 1)), 1000);
     return () => clearInterval(t);
