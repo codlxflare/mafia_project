@@ -91,6 +91,7 @@ export default function Game({
   useEffect(() => { if (phase !== 'voting') setMyVote(null); }, [phase]);
   const hadTieFavoritesRef = useRef(false);
   const prevTieBreakSecRef = useRef(null);
+  const voteTieFavorites = room?.voteTieFavorites;
   useEffect(() => {
     const hasTieFavorites = phase === 'voting' && (voteTieFavorites?.length ?? 0) > 0;
     if (hasTieFavorites && !hadTieFavoritesRef.current) setMyVote(null);
@@ -183,7 +184,6 @@ export default function Game({
       ? alive
       : playerIds.filter((id) => !dead.includes(id));
 
-  const voteTieFavorites = room?.voteTieFavorites;
   const votingCandidates = voteTieFavorites?.length
     ? aliveIds.filter((id) => voteTieFavorites.includes(id))
     : aliveIds.filter((id) => id !== playerId);

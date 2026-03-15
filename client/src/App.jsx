@@ -74,6 +74,8 @@ export default function App() {
   const nightSyncRequestedRef = useRef(false);
   const audioUnlockHandledRef = useRef(false);
   const wasDisconnectedRef = useRef(false);
+  const addHostLineRef = useRef(null);
+  const playPhaseSoundRef = useRef(null);
   useEffect(() => { speakHostRef.current = speakHost; }, [speakHost]);
   useEffect(() => { soundEffectsRef.current = soundEffects; }, [soundEffects]);
   useEffect(() => { isCreatorRef.current = isCreator; }, [isCreator]);
@@ -319,6 +321,11 @@ export default function App() {
     } catch (_) {}
   }, []);
 
+  useEffect(() => {
+    addHostLineRef.current = addHostLine;
+    playPhaseSoundRef.current = playPhaseSound;
+  }, [addHostLine, playPhaseSound]);
+
   const playTurnSound = useCallback((kind) => {
     if (typeof window === 'undefined' || !soundEffectsRef.current) return;
     try {
@@ -351,21 +358,11 @@ export default function App() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.on('host_says', addHostLine);
-    socket.on('room_updated', setRoom);
-    socket.on('game_started', (data) => {
-      log('game_started');
-      setStartingGame(false);
-      setScreen('game');
-      setRoundIndex(data?.roundIndex ?? 1);
-      setNightStep(null);
-      setNightTurn(null);
-      setGameResult(null);
-    });
-    socket.on('phase', (p) => {
+    const onHostSays = (payload) => addHostLineRef.current?.(payload);
+    const onPhase = (p) => {
       log('phase', p);
       setPhase(p);
-      if (p) playPhaseSound(p);
+      if (p) playPhaseSoundRef.current?.(p);
       if (p === 'lobby') setScreen('lobby');
       if (p !== 'night') {
         setNightStep(null);
@@ -377,7 +374,19 @@ export default function App() {
       if (p === 'night' || p === 'ended') setExcludedForLastWords(null);
       if (p === 'day') setHostAnnouncedDay(true);
       else setHostAnnouncedDay(false);
+    };
+    socket.on('host_says', onHostSays);
+    socket.on('room_updated', setRoom);
+    socket.on('game_started', (data) => {
+      log('game_started');
+      setStartingGame(false);
+      setScreen('game');
+      setRoundIndex(data?.roundIndex ?? 1);
+      setNightStep(null);
+      setNightTurn(null);
+      setGameResult(null);
     });
+    socket.on('phase', onPhase);
     socket.on('host_announced', (step) => {
       if (step === 'day') setHostAnnouncedDay(true);
       if (step?.startsWith('night_')) setHostAnnouncedNightStep(step);
@@ -434,7 +443,7 @@ export default function App() {
     socket.on('last_words_said', (payload) => setReactions((prev) => [...prev.slice(-29), { type: 'last_words', ...payload }]));
     socket.on('reaction', (payload) => setReactions((prev) => [...prev.slice(-29), { type: 'emoji', ...payload }]));
     return () => {
-      socket.off('host_says', addHostLine);
+      socket.off('host_says', onHostSays);
       socket.off('room_updated');
       socket.off('game_started');
       socket.off('phase');
@@ -455,7 +464,7 @@ export default function App() {
       socket.off('reaction');
       socket.off('host_announced');
     };
-  }, [socket, addHostLine, playPhaseSound]);
+  }, [socket]);
 
   const createRoom = (name) => {
     if (!socket || creatingRoom) return;
@@ -524,6 +533,10 @@ export default function App() {
     });
   };
 
+  const setRoomSettings = (opts) => {
+    socket?.emit('room_settings', opts);
+  };
+
   const startGame = () => {
     if (startingGame) return;
     setStartingGame(true);
@@ -558,9 +571,6 @@ export default function App() {
       </>
     );
   }
-  const setRoomSettings = (opts) => {
-    socket?.emit('room_settings', opts);
-  };
 
   if (screen === 'lobby') {
     return (
