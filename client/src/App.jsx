@@ -394,7 +394,7 @@ export default function App() {
         (data?.step === 'don_decides' && r === 'don') ||
         (data?.step === 'doctor' && r === 'doctor') ||
         (data?.step === 'detective' && r === 'detective') ||
-        (data?.step === 'veteran' && r === 'veteran');
+        (data?.step === 'don_check' && r === 'don');
       log('night_turn', 'step=', data?.step, 'myRole=', r, 'isMyStep=', isMyStep);
       if (isMyStep && data) setNightTurn(data);
     });
@@ -416,7 +416,8 @@ export default function App() {
     socket.on('day_started', (data) => {
       setAlive(data.alive || []);
       if (data.roundIndex != null) setRoundIndex(data.roundIndex);
-      if (data.discussionTimerSec != null) setDiscussionTimerSec(data.discussionTimerSec);
+      if (data.discussionTotalSec != null) setDiscussionTimerSec(data.discussionTotalSec);
+      else if (data.discussionTimerSec != null) setDiscussionTimerSec(data.discussionTimerSec);
     });
     socket.on('round', (r) => setRoundIndex(r));
     socket.on('game_ended', (data) => {

@@ -1,6 +1,6 @@
 /**
  * Логика игры: роли, фазы, победа.
- * Роли: mafia, don, doctor, detective, civilian, lucky, journalist, veteran.
+ * Роли: mafia, don, doctor, detective, civilian, lucky, journalist.
  */
 
 export const ROLES = {
@@ -9,11 +9,8 @@ export const ROLES = {
   doctor: 'doctor',
   detective: 'detective',
   civilian: 'civilian',
-  // Варианты мирных («везунчик», «журналист») по ТЗ считаются обычными мирными.
-  // В раздаче ролей мы используем только civilian, чтобы не плодить отдельные роли.
   lucky: 'lucky',
   journalist: 'journalist',
-  veteran: 'veteran',
 };
 
 /** Краткое описание роли для ведущего (что делает ночью/днём). */
@@ -25,7 +22,6 @@ export const ROLE_DESCRIPTIONS = {
   civilian: 'Мирный житель — ночью не просыпается. Днём участвует в обсуждении и голосовании.',
   lucky: 'Везунчик — мирный житель, без ночного действия. Днём голосует.',
   journalist: 'Журналист — мирный житель, без ночного действия. Днём голосует.',
-  veteran: 'Ветеран — мирный. Один раз за игру (только в первую ночь) может включить защиту: этой ночью его не убьют.',
 };
 
 const MIN_PLAYERS = 5;
@@ -52,8 +48,7 @@ function randomCivilianFlavor() {
  * 5: 1 мафия-дон, доктор, детектив, 2 мирных.
  * 6: мафия, дон, доктор, детектив, 2 мирных.
  * 7: 2 мафии, доктор, детектив, 3 мирных.
- * 8–9: 2 мафии, дон, доктор, детектив, ветеран, остальные мирные.
- * 10–12: то же, мирных больше.
+ * 8–12: 2 мафии, дон, доктор, детектив, остальные мирные.
  * Все мирные в раздаче — роль civilian (без отдельных везунчик/журналист).
  */
 export function assignRoles(playerIds) {
@@ -67,13 +62,9 @@ export function assignRoles(playerIds) {
     roles.push(ROLES.mafia, ROLES.don, ROLES.doctor, ROLES.detective, ...Array(2).fill(null).map(randomCivilianFlavor));
   } else if (n === 7) {
     roles.push(ROLES.mafia, ROLES.mafia, ROLES.doctor, ROLES.detective, ...Array(3).fill(null).map(randomCivilianFlavor));
-  } else if (n === 8) {
-    roles.push(ROLES.mafia, ROLES.mafia, ROLES.don, ROLES.doctor, ROLES.detective, ROLES.veteran, ...Array(2).fill(null).map(randomCivilianFlavor));
-  } else if (n === 9) {
-    roles.push(ROLES.mafia, ROLES.mafia, ROLES.don, ROLES.doctor, ROLES.detective, ROLES.veteran, ...Array(3).fill(null).map(randomCivilianFlavor));
   } else {
-    const civilians = n - 6;
-    roles.push(ROLES.mafia, ROLES.mafia, ROLES.don, ROLES.doctor, ROLES.detective, ROLES.veteran, ...Array(civilians).fill(null).map(randomCivilianFlavor));
+    const civilians = n - 5;
+    roles.push(ROLES.mafia, ROLES.mafia, ROLES.don, ROLES.doctor, ROLES.detective, ...Array(civilians).fill(null).map(randomCivilianFlavor));
   }
 
   const shuffled = shuffle(roles);
@@ -108,11 +99,6 @@ export function checkWin(gameState) {
   if (mafiaCount === 0) return 'civilians';
   if (mafiaCount >= civilianCount) return 'mafia';
   return null;
-}
-
-/** Есть ли среди живых игроков ветеран (для ночного шага). */
-export function needVeteran(gameState) {
-  return getAlivePlayers(gameState).some((id) => gameState.roles[id] === ROLES.veteran);
 }
 
 /** Мирные роли (без ночного действия мафии/дона). */

@@ -136,17 +136,18 @@ describe('Синхронность ИИ-ведущий и игроки (инте
         const step = data?.step;
         const isMyStep =
           (step === 'mafia' && (role === 'mafia' || role === 'don')) ||
+          (step === 'don_decides' && role === 'don') ||
+          (step === 'don_check' && role === 'don') ||
           (step === 'doctor' && role === 'doctor') ||
-          (step === 'detective' && role === 'detective') ||
-          (step === 'veteran' && role === 'veteran');
+          (step === 'detective' && role === 'detective');
         if (!isMyStep || !data?.aliveIds?.length) return;
         const alive = data.aliveIds;
         const me = s.id;
         const target = alive.find((id) => id !== me) || alive[0];
-        if (step === 'mafia' || step === 'don') s.emit('night_choice', { victimId: target });
+        if (step === 'mafia' || step === 'don_decides') s.emit('night_choice', { victimId: target });
+        else if (step === 'don_check') s.emit('night_choice', { donCheckId: target });
         else if (step === 'doctor') s.emit('night_choice', { savedId: target });
         else if (step === 'detective') s.emit('night_choice', { checkId: target });
-        else if (step === 'veteran') s.emit('night_choice', { veteranProtect: false });
       });
     });
 

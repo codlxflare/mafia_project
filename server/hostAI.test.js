@@ -59,7 +59,7 @@ describe('hostAI fallback (без API ключа)', () => {
       round: 1,
       killedName: 'Петя',
       savedByName: null,
-      veteranSavedHimself: false,
+      victimCount: 1,
     });
     assert(typeof line === 'string' && line.length > 0);
   });
@@ -69,7 +69,7 @@ describe('hostAI fallback (без API ключа)', () => {
       round: 1,
       killedName: null,
       savedByName: 'Маша',
-      veteranSavedHimself: false,
+      victimCount: 0,
     });
     assert(typeof line === 'string' && line.length > 0);
   });
@@ -114,12 +114,12 @@ describe('hostAI fallback (без API ключа)', () => {
     assert(typeof line === 'string' && line.length > 0);
   });
 
-  it('night_summary при только убийстве (без доктора/детектива/ветерана) не упоминает их в контексте этой ночи', async () => {
+  it('night_summary при только убийстве не упоминает доктора/детектива в контексте этой ночи', async () => {
     const line = await getHostLine('night_summary', {
       round: 1,
       killedName: 'Игрок',
+      victimCount: 1,
       savedByName: null,
-      veteranSavedHimself: false,
       detectiveCheckedName: null,
       detectiveWasMafia: null,
     });
@@ -128,15 +128,14 @@ describe('hostAI fallback (без API ключа)', () => {
     const lower = line.toLowerCase();
     assert(!lower.includes('доктор спас'), 'Не должно быть «доктор спас», если доктора не было');
     assert(!lower.includes('детектив проверил'), 'Не должно быть «детектив проверил», если не передано');
-    assert(!lower.includes('ветеран защитился'), 'Не должно быть «ветеран защитился», если не передано');
   });
 
   it('night_summary при спокойной ночи (никто не погиб, нет спасения) — нейтральная фраза', async () => {
     const line = await getHostLine('night_summary', {
       round: 1,
       killedName: null,
+      victimCount: 0,
       savedByName: null,
-      veteranSavedHimself: false,
       detectiveCheckedName: null,
       detectiveWasMafia: null,
     });

@@ -10,7 +10,6 @@ import {
   getAlivePlayers,
   getAliveMafia,
   isMafiaForDetective,
-  needVeteran,
   ROLES,
   MIN_PLAYERS,
   MAX_PLAYERS,
@@ -67,20 +66,8 @@ describe('assignRoles', () => {
     assert.strictEqual(values.length, 7);
   });
 
-  it('при 8 игроках: 2 мафии, дон, доктор, детектив, ветеран, 2 мирных', () => {
+  it('при 8 игроках: 2 мафии, дон, доктор, детектив, 3 мирных', () => {
     const ids = Array.from({ length: 8 }, (_, i) => `p${i}`);
-    const roles = assignRoles(ids);
-    assert(roles);
-    const values = Object.values(roles);
-    assert.strictEqual(values.filter((r) => r === ROLES.mafia).length, 2);
-    assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1);
-    assert.strictEqual(values.filter((r) => r === ROLES.veteran).length, 1);
-    assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 2);
-    assert.strictEqual(values.length, 8);
-  });
-
-  it('при 9 игроках: 2 мафии, дон, доктор, детектив, ветеран, 3 мирных', () => {
-    const ids = Array.from({ length: 9 }, (_, i) => `p${i}`);
     const roles = assignRoles(ids);
     assert(roles);
     const values = Object.values(roles);
@@ -88,13 +75,12 @@ describe('assignRoles', () => {
     assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1);
-    assert.strictEqual(values.filter((r) => r === ROLES.veteran).length, 1);
     assert.strictEqual(values.filter((r) => r === ROLES.civilian).length, 3);
-    assert.strictEqual(values.length, 9);
+    assert.strictEqual(values.length, 8);
   });
 
-  it('при 10–12 игроках: 2 мафии, дон, доктор, детектив, ветеран, остальные мирные', () => {
-    for (const n of [10, 11, 12]) {
+  it('при 9–12 игроках: 2 мафии, дон, доктор, детектив, остальные мирные', () => {
+    for (const n of [9, 10, 11, 12]) {
       const ids = Array.from({ length: n }, (_, i) => `p${i}`);
       const roles = assignRoles(ids);
       assert(roles, `n=${n}`);
@@ -103,9 +89,8 @@ describe('assignRoles', () => {
       assert.strictEqual(values.filter((r) => r === ROLES.don).length, 1, `n=${n} don`);
       assert.strictEqual(values.filter((r) => r === ROLES.doctor).length, 1, `n=${n} doctor`);
       assert.strictEqual(values.filter((r) => r === ROLES.detective).length, 1, `n=${n} detective`);
-      assert.strictEqual(values.filter((r) => r === ROLES.veteran).length, 1, `n=${n} veteran`);
       const civilians = values.filter((r) => r === ROLES.civilian).length;
-      assert.strictEqual(civilians, n - 6, `n=${n} civilians`);
+      assert.strictEqual(civilians, n - 5, `n=${n} civilians`);
       assert.strictEqual(values.filter((r) => r === ROLES.lucky || r === ROLES.journalist).length, 0, `n=${n} no lucky/journalist`);
       assert.strictEqual(values.length, n, `n=${n} total`);
     }
@@ -148,25 +133,6 @@ describe('isMafiaForDetective', () => {
   });
   it('мафия для детектива — мафия', () => {
     assert.strictEqual(isMafiaForDetective(ROLES.mafia), true);
-  });
-});
-
-describe('needVeteran', () => {
-  it('возвращает true если ветеран жив', () => {
-    const gameState = {
-      playerIds: ['a', 'b'],
-      dead: new Set(),
-      roles: { a: ROLES.veteran, b: ROLES.civilian },
-    };
-    assert.strictEqual(needVeteran(gameState), true);
-  });
-  it('возвращает false если ветеран мёртв', () => {
-    const gameState = {
-      playerIds: ['a', 'b'],
-      dead: new Set(['a']),
-      roles: { a: ROLES.veteran, b: ROLES.civilian },
-    };
-    assert.strictEqual(needVeteran(gameState), false);
   });
 });
 

@@ -4,7 +4,7 @@ import path from 'path';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { assignRoles, checkWin, getAlivePlayers, getAliveMafia, isMafiaForDetective, needVeteran, ROLES, MIN_PLAYERS } from './gameLogic.js';
+import { assignRoles, checkWin, getAlivePlayers, getAliveMafia, isMafiaForDetective, ROLES, MIN_PLAYERS } from './gameLogic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
@@ -185,9 +185,9 @@ function getPlayerIdsForNightStep(room, roleKey) {
   const alive = getAlivePlayers(room.gameState);
   if (roleKey === 'mafia') return getAliveMafia(room.gameState);
   if (roleKey === 'don_decides') return alive.filter((id) => room.gameState.roles[id] === ROLES.don);
+  if (roleKey === 'don_check') return alive.filter((id) => room.gameState.roles[id] === ROLES.don);
   if (roleKey === 'doctor') return alive.filter((id) => room.gameState.roles[id] === ROLES.doctor);
   if (roleKey === 'detective') return alive.filter((id) => room.gameState.roles[id] === ROLES.detective);
-  if (roleKey === 'veteran') return alive.filter((id) => room.gameState.roles[id] === ROLES.veteran);
   return [];
 }
 
@@ -268,15 +268,13 @@ function waitForNightChoice(io, code, roleKey) {
       const need =
         roleKey === 'mafia'
           ? getAliveMafia(r.gameState).some((id) => isConnected(r, id))
-          : roleKey === 'don_decides'
+          : roleKey === 'don_decides' || roleKey === 'don_check'
             ? alive.some((id) => r.gameState.roles[id] === ROLES.don && isConnected(r, id))
             : roleKey === 'doctor'
               ? alive.some((id) => r.gameState.roles[id] === ROLES.doctor && isConnected(r, id))
               : roleKey === 'detective'
                 ? alive.some((id) => r.gameState.roles[id] === ROLES.detective && isConnected(r, id))
-                : roleKey === 'veteran'
-                  ? (alive.some((id) => r.gameState.roles[id] === ROLES.veteran && isConnected(r, id)) && !r.gameState.veteranUsedProtect)
-                  : false;
+                : false;
       if (!need) {
         const mafiaCount = r?.gameState ? getAliveMafia(r.gameState).length : 0;
         log('Server', 'waitForNightChoice DONE (no players for step)', roleKey, 'aliveMafia=', mafiaCount, 'playerIds=', r?.gameState?.playerIds?.length);
@@ -290,13 +288,13 @@ function waitForNightChoice(io, code, roleKey) {
           ? mafiaConnected.length > 0 && mafiaConnected.every((id) => r.gameState.nightChoices.mafiaVotes?.[id] != null)
           : roleKey === 'don_decides'
             ? r.gameState.nightChoices.donMafiaChoice !== undefined
-            : roleKey === 'doctor'
-              ? r.gameState.nightChoices.doctor != null
-              : roleKey === 'detective'
-                ? (r.gameState.nightChoices.detectiveCheckId != null || r.gameState.nightChoices.commissionerShotId != null)
-                : roleKey === 'veteran'
-                  ? r.gameState.nightChoices.veteran !== undefined
-                  : false;
+            : roleKey === 'don_check'
+              ? r.gameState.nightChoices.donCheckId != null
+              : roleKey === 'doctor'
+                ? r.gameState.nightChoices.doctor != null
+                : roleKey === 'detective'
+                  ? (r.gameState.nightChoices.detectiveCheckId != null || r.gameState.nightChoices.commissionerShotId != null)
+                    : false;
       if (has) {
         log('Server', 'waitForNightChoice DONE (choice received)', roleKey);
         done();
@@ -320,16 +318,16 @@ function waitForNightChoice(io, code, roleKey) {
           ? mafiaConnectedNudge.length > 0 && mafiaConnectedNudge.every((id) => r.gameState.nightChoices.mafiaVotes?.[id] != null)
           : roleKey === 'don_decides'
             ? r.gameState.nightChoices.donMafiaChoice !== undefined
-            : roleKey === 'doctor'
-              ? r.gameState.nightChoices.doctor != null
-              : roleKey === 'detective'
-                ? (r.gameState.nightChoices.detectiveCheckId != null || r.gameState.nightChoices.commissionerShotId != null)
-                : roleKey === 'veteran'
-                  ? r.gameState.nightChoices.veteran !== undefined
+            : roleKey === 'don_check'
+              ? r.gameState.nightChoices.donCheckId != null
+              : roleKey === 'doctor'
+                ? r.gameState.nightChoices.doctor != null
+                  : roleKey === 'detective'
+                  ? (r.gameState.nightChoices.detectiveCheckId != null || r.gameState.nightChoices.commissionerShotId != null)
                   : false);
       if (has || resolved) return;
       log('Server', 'waitForNightChoice nudge', roleKey);
-      const nudgeKey = roleKey === 'don_decides' ? 'night_nudge_mafia' : `night_nudge_${roleKey}`;
+      const nudgeKey = (roleKey === 'don_decides' || roleKey === 'don_check') ? 'night_nudge_mafia' : `night_nudge_${roleKey}`;
       const line = await getHostLine(nudgeKey, { voiceStyle: r?.hostVoiceStyle, recentHostLines: (r?.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
       if (!resolved) {
         const r2 = rooms.get(code);
@@ -341,12 +339,12 @@ function waitForNightChoice(io, code, roleKey) {
             ? mafiaConnected2.length > 0 && mafiaConnected2.every((id) => r2.gameState.nightChoices.mafiaVotes?.[id] != null)
             : roleKey === 'don_decides'
               ? r2.gameState.nightChoices.donMafiaChoice !== undefined
-              : roleKey === 'doctor'
-                ? r2.gameState.nightChoices.doctor != null
-                : roleKey === 'detective'
-                  ? (r2.gameState.nightChoices.detectiveCheckId != null || r2.gameState.nightChoices.commissionerShotId != null)
-                  : roleKey === 'veteran'
-                    ? r2.gameState.nightChoices.veteran !== undefined
+              : roleKey === 'don_check'
+                ? r2.gameState.nightChoices.donCheckId != null
+                : roleKey === 'doctor'
+                  ? r2.gameState.nightChoices.doctor != null
+                  : roleKey === 'detective'
+                    ? (r2.gameState.nightChoices.detectiveCheckId != null || r2.gameState.nightChoices.commissionerShotId != null)
                     : false);
         if (!hasNow) {
           io.to(code).emit('host_says', { text: line, type: nudgeKey });
@@ -373,8 +371,7 @@ async function runNightSequence(io, code) {
   const needMafia = getAliveMafia(room.gameState).length > 0;
   const needDoctor = alive.some((id) => room.gameState.roles[id] === ROLES.doctor);
   const needDetective = alive.some((id) => room.gameState.roles[id] === ROLES.detective);
-  const needVet = round === 1 && needVeteran(room.gameState);
-  log('Server', 'night round', round, 'needMafia=', needMafia, 'needDoctor=', needDoctor, 'needDetective=', needDetective, 'needVet=', needVet);
+  log('Server', 'night round', round, 'needMafia=', needMafia, 'needDoctor=', needDoctor, 'needDetective=', needDetective);
 
   const say = async (step, data = {}) => {
     const text = await getHostLine(step, { ...data, voiceStyle: room.hostVoiceStyle, recentHostLines: (room.hostRecentLines || []).slice(-8), gameContext: buildGameContext(room) });
@@ -451,6 +448,30 @@ async function runNightSequence(io, code) {
   io.to(code).emit('night_step', null);
   await sayTransition('night_mafia_sleep');
 
+  const needDonCheck = getAlivePlayers(room.gameState).some((id) => room.gameState.roles[id] === ROLES.don);
+  if (needDonCheck) {
+    room.gameState.currentNightStep = 'don_check';
+    room.gameState.nightChoices.donCheckId = undefined;
+    io.to(code).emit('night_step', 'don_check');
+    await say('night_don_check_wake', { voiceStyle: room.hostVoiceStyle });
+    await delay(DELAY_AFTER_WAKE_BEFORE_TURN_MS);
+    io.to(code).emit('host_announced', 'night_don_check');
+    emitNightTurn(io, code, 'don_check');
+    await waitForNightChoice(io, code, 'don_check');
+    const rDon = rooms.get(code);
+    if (rDon?.gameState?.nightChoices?.donCheckId != null) {
+      const donCheckId = rDon.gameState.nightChoices.donCheckId;
+      const isDetective = rDon.gameState.roles[donCheckId] === ROLES.detective;
+      const donIds = getPlayerIdsForNightStep(rDon, 'don_check');
+      donIds.forEach((donId) => io.to(donId).emit('don_result', { targetId: donCheckId, isDetective }));
+    }
+    await delay(DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS);
+    emitNightTurnEnd(io, code, 'don_check');
+    room.gameState.currentNightStep = null;
+    io.to(code).emit('night_step', null);
+    await sayTransition('night_don_check_sleep');
+  }
+
   if (needDoctor) {
     room.gameState.currentNightStep = 'doctor';
     io.to(code).emit('night_step', 'doctor');
@@ -481,21 +502,6 @@ async function runNightSequence(io, code) {
     await sayTransition('night_detective_sleep');
   }
 
-  if (needVet) {
-    room.gameState.currentNightStep = 'veteran';
-    io.to(code).emit('night_step', 'veteran');
-    await say('night_veteran_wake');
-    await delay(DELAY_AFTER_WAKE_BEFORE_TURN_MS);
-    io.to(code).emit('host_announced', 'night_veteran');
-    emitNightTurn(io, code, 'veteran');
-    await waitForNightChoice(io, code, 'veteran');
-    await delay(DELAY_AFTER_CHOICE_BEFORE_SLEEP_MS);
-    emitNightTurnEnd(io, code, 'veteran');
-    room.gameState.currentNightStep = null;
-    io.to(code).emit('night_step', null);
-    await sayTransition('night_veteran_sleep');
-  }
-
   await say('night_morning');
 
   const r = rooms.get(code);
@@ -503,13 +509,10 @@ async function runNightSequence(io, code) {
   const mafiaVictimId = r.gameState.nightChoices.mafia;
   const savedId = needDoctor ? r.gameState.nightChoices.doctor : null;
   const commissionerShotId = r.gameState.nightChoices.commissionerShotId ?? null;
-  const veteranProtectTonight = needVet && r.gameState.nightChoices.veteran === true;
-  if (needVet && r.gameState.nightChoices.veteran === true) r.gameState.veteranUsedProtect = true;
   const al = getAlivePlayers(r.gameState);
 
   let mafiaKill = mafiaVictimId && al.includes(mafiaVictimId) ? mafiaVictimId : null;
   if (savedId === mafiaKill) mafiaKill = null;
-  if (mafiaKill && r.gameState.roles[mafiaKill] === ROLES.veteran && veteranProtectTonight) mafiaKill = null;
 
   let commissionerKill = commissionerShotId && al.includes(commissionerShotId) ? commissionerShotId : null;
   if (savedId === commissionerKill) commissionerKill = null;
@@ -517,7 +520,6 @@ async function runNightSequence(io, code) {
   const victimIds = [...new Set([mafiaKill, commissionerKill].filter(Boolean))];
   r.gameState.lastKilled = mafiaKill ?? commissionerKill ?? null;
   r.gameState.savedByDoctor = savedId;
-  r.gameState.veteranProtectTonight = veteranProtectTonight;
   const detectiveCheckedId = needDetective ? r.gameState.nightChoices.detectiveCheckId : null;
   r.gameState.detectiveChecked = detectiveCheckedId;
   r.gameState.nightChoices = {};
@@ -527,7 +529,7 @@ async function runNightSequence(io, code) {
   if (win) {
     r.phase = 'ended';
     const avatars = r.playerAvatars || {};
-    const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист', veteran: 'ветеран' };
+    const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист' };
     const victims = victimIds.map((id) => ({
       name: r.playerNames[id],
       role: r.gameState.roles[id],
@@ -540,7 +542,6 @@ async function runNightSequence(io, code) {
       victims,
       savedByName: savedId ? r.playerNames[savedId] : null,
       savedAvatarId: savedId ? avatars[savedId] : null,
-      veteranSavedHimself: veteranProtectTonight,
       detectiveCheckedName: detectiveCheckedId != null ? r.playerNames[detectiveCheckedId] : null,
       detectiveCheckedAvatarId: detectiveCheckedId != null ? avatars[detectiveCheckedId] : null,
       detectiveWasMafia: detectiveCheckedId != null ? isMafiaForDetective(r.gameState.roles[detectiveCheckedId]) : null,
@@ -598,7 +599,7 @@ async function runNightSequence(io, code) {
 
   r.phase = 'day';
   const avatars = r.playerAvatars || {};
-  const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист', veteran: 'ветеран' };
+  const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист' };
   const victims = victimIds.map((id) => ({
     name: r.playerNames[id],
     role: r.gameState.roles[id],
@@ -611,7 +612,6 @@ async function runNightSequence(io, code) {
     victims,
     savedByName: savedId ? r.playerNames[savedId] : null,
     savedAvatarId: savedId ? avatars[savedId] : null,
-    veteranSavedHimself: veteranProtectTonight,
     detectiveCheckedName: detectiveCheckedId != null ? r.playerNames[detectiveCheckedId] : null,
     detectiveCheckedAvatarId: detectiveCheckedId != null ? avatars[detectiveCheckedId] : null,
     detectiveWasMafia: detectiveCheckedId != null ? isMafiaForDetective(r.gameState.roles[detectiveCheckedId]) : null,
@@ -636,13 +636,17 @@ async function runNightSequence(io, code) {
   log('Server', 'runNightSequence DONE -> day', 'killed=', victimIds.length ? victimIds.map((id) => r.playerNames[id]) : null);
   io.to(code).emit('phase', 'day');
   io.to(code).emit('room_updated', roomForClient(r));
+  const aliveCount = getAlivePlayers(r.gameState).length;
+  const turnSec = r.discussionTurnSec ?? 60;
+  const discussionTotalSec = turnSec * Math.max(1, aliveCount);
   io.to(code).emit('day_started', {
     killed: victimIds[0] ?? null,
     killedIds: victimIds,
     alive: getAlivePlayers(r.gameState),
     roundIndex: r.gameState.roundIndex,
-    discussionTimerSec: r.discussionTimerSec ?? 120,
-    discussionTurnSec: r.discussionTurnSec ?? 60,
+    discussionTimerSec: discussionTotalSec,
+    discussionTotalSec,
+    discussionTurnSec: turnSec,
   });
   r.discussionTurnIndex = 0;
   scheduleNextDiscussionTurn(io, code);
@@ -832,6 +836,7 @@ io.on('connection', (socket) => {
       if (nc.detectiveCheckId === oldId) nc.detectiveCheckId = newId;
       if (nc.commissionerShotId === oldId) nc.commissionerShotId = newId;
       if (nc.donMafiaChoice === oldId) nc.donMafiaChoice = newId;
+      if (nc.donCheckId === oldId) nc.donCheckId = newId;
       if (nc.mafiaVotes && nc.mafiaVotes[oldId] !== undefined) {
         const target = nc.mafiaVotes[oldId];
         delete nc.mafiaVotes[oldId];
@@ -922,13 +927,16 @@ io.on('connection', (socket) => {
     }
     if (room.phase === 'day' || room.phase === 'voting') {
       const alive = getAlivePlayers(room.gameState);
+      const turnSec = room.discussionTurnSec ?? 60;
+      const totalSec = turnSec * Math.max(1, alive.length);
       socket.emit('day_started', {
         killed: null,
         killedIds: [],
         alive,
         roundIndex: room.gameState.roundIndex ?? 1,
-        discussionTimerSec: room.discussionTimerSec ?? 120,
-        discussionTurnSec: room.discussionTurnSec ?? 60,
+        discussionTimerSec: totalSec,
+        discussionTotalSec: totalSec,
+        discussionTurnSec: turnSec,
       });
     }
     if (room.phase === 'voting' && room.votes && Object.keys(room.votes).length > 0) {
@@ -1007,7 +1015,6 @@ io.on('connection', (socket) => {
       detectiveChecked: null,
       nightChoices: {},
       roundIndex: 1,
-      veteranUsedProtect: false,
       currentNightStep: null,
       doctorSelfHealed: false,
       lastCommissionerShotId: null,
@@ -1100,10 +1107,6 @@ io.on('connection', (socket) => {
         log('Server', 'night_choice SET commissioner shootId=', id);
       }
     }
-    if (payload.veteranProtect !== undefined && role === ROLES.veteran) {
-      room.gameState.nightChoices.veteran = !!payload.veteranProtect;
-      log('Server', 'night_choice SET veteran protect=', payload.veteranProtect);
-    }
     if (room.gameState.currentNightStep === 'don_decides' && role === ROLES.don) {
       const id = payload.victimId;
       if (id === null || id === undefined) {
@@ -1112,6 +1115,13 @@ io.on('connection', (socket) => {
       } else if (alive.includes(id)) {
         room.gameState.nightChoices.donMafiaChoice = id;
         log('Server', 'night_choice SET don decides victim=', id);
+      }
+    }
+    if (room.gameState.currentNightStep === 'don_check' && role === ROLES.don && payload.donCheckId !== undefined) {
+      const id = payload.donCheckId;
+      if (alive.includes(id)) {
+        room.gameState.nightChoices.donCheckId = id;
+        log('Server', 'night_choice SET don check target=', id);
       }
     }
     socket.emit('choice_received');
@@ -1138,12 +1148,13 @@ io.on('connection', (socket) => {
     if (!step) return;
     const mafiaAll = step === 'mafia' && getAliveMafia(room.gameState).every((id) => room.gameState.nightChoices.mafiaVotes?.[id] != null);
     const donDecidesAll = step === 'don_decides' && room.gameState.nightChoices.donMafiaChoice !== undefined;
+    const donCheckAll = step === 'don_check' && room.gameState.nightChoices.donCheckId != null;
     const complete =
       mafiaAll ||
       donDecidesAll ||
+      donCheckAll ||
       (step === 'doctor' && room.gameState.nightChoices.doctor != null) ||
-      (step === 'detective' && (room.gameState.nightChoices.detectiveCheckId != null || room.gameState.nightChoices.commissionerShotId != null)) ||
-      (step === 'veteran' && room.gameState.nightChoices.veteran !== undefined);
+      (step === 'detective' && (room.gameState.nightChoices.detectiveCheckId != null || room.gameState.nightChoices.commissionerShotId != null));
     if (complete && room._nightWaitDone) {
       log('Server', 'night_choice completes step, resolving wait', step);
       room._nightWaitDone();
@@ -1206,7 +1217,7 @@ io.on('connection', (socket) => {
   });
 
   const VOTE_TIE_BREAK_SEC = 30;
-  const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист', veteran: 'ветеран' };
+  const ROLE_NAMES_RU = { mafia: 'мафия', don: 'дон', doctor: 'доктор', detective: 'детектив', civilian: 'мирный', lucky: 'везунчик', journalist: 'журналист' };
 
   socket.on('vote', async (targetId) => {
     const room = getRoom(socket);

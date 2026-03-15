@@ -9,7 +9,6 @@ const ROLE_NAMES = {
   civilian: 'Мирный житель',
   lucky: 'Везунчик',
   journalist: 'Журналист',
-  veteran: 'Ветеран',
 };
 const ROLE_DESCR = {
   mafia: 'Ночью выбираешь жертву вместе с напарниками. Днём притворяйся мирным.',
@@ -19,7 +18,6 @@ const ROLE_DESCR = {
   civilian: 'Ищи мафию по поведению и голосуй на обсуждении.',
   lucky: 'Мирный житель. Ночью не просыпаешься. Днём голосуй и ищи мафию.',
   journalist: 'Мирный житель. Ночью не просыпаешься. Днём голосуй и ищи мафию.',
-  veteran: 'Мирный. Один раз за игру (только первая ночь) можешь включить защиту — этой ночью тебя не убьют.',
 };
 
 const REACTION_EMOJIS = ['👀', '😂', '😱', '🤐', '👍', '👎'];
@@ -70,6 +68,7 @@ export default function Game({
   const [votingStarting, setVotingStarting] = useState(false);
   const [discussionTurn, setDiscussionTurn] = useState(null);
   const [detectiveAction, setDetectiveAction] = useState(null);
+  const [donResult, setDonResult] = useState(null);
   const [mafiaRevoteSec, setMafiaRevoteSec] = useState(null);
   const discussionTimerRef = useRef(null);
   const lastWordsTimerRef = useRef(null);
@@ -80,8 +79,9 @@ export default function Game({
     const t = setTimeout(() => setIntroCutsceneDone(true), 5200);
     return () => clearTimeout(t);
   }, [phase]);
-  useEffect(() => { if (phase !== 'night') setMyChoice(null); setDetectiveAction(null); setMafiaRevoteSec(null); }, [phase]);
+  useEffect(() => { if (phase !== 'night') setMyChoice(null); setDetectiveAction(null); setDonResult(null); setMafiaRevoteSec(null); }, [phase]);
   useEffect(() => { if (nightTurn?.step !== 'detective') setDetectiveAction(null); }, [nightTurn?.step]);
+  useEffect(() => { if (nightTurn?.step !== 'don_check') setDonResult(null); }, [nightTurn?.step]);
   useEffect(() => { if (phase !== 'voting') setMyVote(null); }, [phase]);
   useEffect(() => {
     if (!socket || nightTurn?.step !== 'mafia') return;
@@ -183,7 +183,7 @@ export default function Game({
     if (payload.savedId != null) setMyChoice({ id: payload.savedId, name: chosenName });
     if (payload.checkId != null) setMyChoice({ id: payload.checkId, name: chosenName });
     if (payload.shootId != null) setMyChoice({ id: payload.shootId, name: chosenName });
-    if (payload.veteranProtect !== undefined) setMyChoice({ id: 'veteran', name: payload.veteranProtect ? 'Защита' : 'Пропуск' });
+    if (payload.donCheckId != null) setMyChoice({ id: payload.donCheckId, name: chosenName });
   };
 
   const sendVote = (targetId, name) => {
@@ -240,6 +240,15 @@ export default function Game({
           tableSelectionHint: detectiveAction === 'check' ? 'Клик по аватару — проверить' : 'Клик по аватару — выстрел',
         };
       }
+      if (nightTurn.step === 'don_check') {
+        const ids = aliveIds.filter((id) => id !== playerId);
+        return {
+          tableSelectableIds: ids,
+          tableChosenId: myChoice?.id ?? null,
+          tableOnSelect: (id, name) => sendNightChoice({ donCheckId: id }, name),
+          tableSelectionHint: 'Клик по аватару — проверить (детектив или нет)',
+        };
+      }
     }
     if (phase === 'voting' && isAliveForVote && !isDead && canVoteInTieBreak && !myVote) {
       return {
@@ -267,6 +276,12 @@ export default function Game({
     const onResult = (data) => setDetectiveResult(data);
     socket.on('detective_result', onResult);
     return () => socket.off('detective_result', onResult);
+  }, [socket]);
+  useEffect(() => {
+    if (!socket) return;
+    const onDonResult = (data) => setDonResult(data);
+    socket.on('don_result', onDonResult);
+    return () => socket.off('don_result', onDonResult);
   }, [socket]);
 
   const showNightWait = phase === 'night' && !isDead && (!nightTurn || !nightChoiceAllowed);
@@ -475,6 +490,24 @@ export default function Game({
           )}
         </div>
       )}
+      {phase === 'night' && nightTurn?.step === 'don_check' && !isDead && nightChoiceAllowed && (
+        <div className="night-choice night-choice--mafia night-choice--table-only">
+          <h3 className="night-choice-title">Проверить игрока (узнать, детектив ли он)</h3>
+          {donResult != null ? (
+            <div className="choice-confirm">
+              <span className="choice-confirm-icon">{donResult.isDetective ? '🔍' : '—'}</span>
+              <span>{donResult.isDetective ? 'Детектив' : 'Не детектив'}</span>
+            </div>
+          ) : myChoice?.id != null ? (
+            <div className="choice-confirm">
+              <span className="choice-confirm-icon">✓</span>
+              <span>Проверяете: <strong>{myChoice.name}</strong></span>
+            </div>
+          ) : (
+            <p className="night-choice-hint">{tableSelectionHint}</p>
+          )}
+        </div>
+      )}
       {phase === 'night' && nightTurn?.step === 'doctor' && !isDead && nightChoiceAllowed && (
         <div className="night-choice night-choice--doctor night-choice--table-only">
           <h3 className="night-choice-title">Кого спасти?</h3>
@@ -516,14 +549,6 @@ export default function Game({
           </div>
         )
       )}
-      {phase === 'night' && nightTurn?.step === 'veteran' && !isDead && nightChoiceAllowed && (
-        <VeteranChoice
-          chosen={myChoice?.id != null}
-          chosenName={myChoice?.name}
-          onProtect={() => sendNightChoice({ veteranProtect: true })}
-          onSkip={() => sendNightChoice({ veteranProtect: false })}
-        />
-      )}
       {phase === 'day' && hostAnnouncedDay && isCreator && (
         <button type="button" className="btn primary btn-cta" onClick={startVoting} disabled={votingStarting} aria-busy={votingStarting}>
           {votingStarting ? 'Переход к голосованию…' : 'Завершить обсуждение → Голосование'}
@@ -534,6 +559,11 @@ export default function Game({
         <div className="discussion-panel">
           <div className="discussion-panel-top">
             <span className="discussion-panel-title">Обсуждение</span>
+            {discussionSecondsLeft != null && (
+              <span className="discussion-panel-total" aria-live="polite" title="Общее время обсуждения">
+                Осталось {Math.floor(discussionSecondsLeft / 60)}:{(discussionSecondsLeft % 60).toString().padStart(2, '0')}
+              </span>
+            )}
           </div>
           {discussionTurn ? (
             <div className={`discussion-now ${discussionTurn.playerId === playerId ? 'discussion-now--you' : ''}`} aria-live="polite">
@@ -751,40 +781,6 @@ function GameTable({
             );
           })}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function VeteranChoice({ chosen, chosenName, onProtect, onSkip }) {
-  return (
-    <div className="night-choice night-choice--enter night-choice--veteran">
-      <h3 className="night-choice-title">Включить защиту на эту ночь?</h3>
-      {chosen ? (
-        <div className="choice-confirm">
-          <span className="choice-confirm-icon">✓</span>
-          <span>Вы выбрали: <strong>{chosenName}</strong></span>
-        </div>
-      ) : (
-        <p className="night-choice-hint">Один раз за игру. Этой ночью вас не убьют.</p>
-      )}
-      <div className="player-list player-list--choice">
-        <button
-          type="button"
-          className="btn choice-btn night-choice-btn"
-          onClick={() => !chosen && onProtect()}
-          disabled={chosen}
-        >
-          Включить защиту
-        </button>
-        <button
-          type="button"
-          className="btn choice-btn night-choice-btn"
-          onClick={() => !chosen && onSkip()}
-          disabled={chosen}
-        >
-          Пропустить
-        </button>
       </div>
     </div>
   );
