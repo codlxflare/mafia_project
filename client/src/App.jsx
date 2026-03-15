@@ -111,6 +111,22 @@ export default function App() {
     socket.emit('get_night_state');
   }, [socket, screen, phase]);
 
+  // После переподключения в лобби — join_room с тем же кодом и именем, чтобы восстановить слот (не добавлять как нового)
+  useEffect(() => {
+    if (!connected || !wasDisconnectedRef.current || !socket || screen !== 'lobby' || !roomCode || !playerName) return;
+    wasDisconnectedRef.current = false;
+    socket.emit('join_room', { code: roomCode, playerName }, (res) => {
+      if (res?.error) {
+        setScreen('home');
+        setHomeError(res.error || 'Не удалось вернуться в лобби');
+        setRoomCode('');
+        return;
+      }
+      setPlayerId(res?.playerId ?? playerId);
+      if (res?.isCreator !== undefined) setIsCreator(res.isCreator);
+    });
+  }, [connected, socket, screen, roomCode, playerName]);
+
   // После переподключения в игре — rejoin, чтобы получить актуальную фазу и состояние
   useEffect(() => {
     if (!connected || !wasDisconnectedRef.current || !socket || screen !== 'game' || !roomCode || !playerName) return;

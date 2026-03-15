@@ -1224,6 +1224,35 @@
   color: var(--muted);
   line-height: 1.35;
 }
+.vote-tie-timer {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vote-tie-timer-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.vote-tie-timer-ring-bg {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+.vote-tie-timer-ring-fill {
+  stroke: rgba(230, 180, 80, 0.85);
+  transition: stroke-dashoffset 1s linear;
+}
+.vote-tie-timer-value {
+  position: relative;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.04em;
+}
 .choice-confirm {
   display: flex;
   align-items: center;

@@ -614,7 +614,25 @@ export default function Game({
             {voteTieFavorites?.length ? 'Переголосование: только между фаворитами' : 'Голосование: кого исключить?'}
           </h3>
           {voteTieFavorites?.length > 0 && tieBreakSecondsLeft != null && (
-            <p className="vote-block-tie-timer" aria-live="polite">{tieBreakSecondsLeft} сек</p>
+            <div className="vote-tie-timer" aria-live="polite" role="timer" aria-valuenow={tieBreakSecondsLeft} aria-valuemin={0} aria-valuemax={30}>
+              <svg className="vote-tie-timer-ring" viewBox="0 0 36 36">
+                <path
+                  className="vote-tie-timer-ring-bg"
+                  d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"
+                  fill="none"
+                  strokeWidth="3"
+                />
+                <path
+                  className="vote-tie-timer-ring-fill"
+                  d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"
+                  fill="none"
+                  strokeWidth="3"
+                  strokeDasharray={97.5}
+                  strokeDashoffset={97.5 - (tieBreakSecondsLeft / 30) * 97.5}
+                />
+              </svg>
+              <span className="vote-tie-timer-value">{tieBreakSecondsLeft}</span>
+            </div>
           )}
           {!canVoteInTieBreak ? (
             <p className="vote-block-hint">Вы в числе фаворитов — в переголосовании голоса не имеете.</p>

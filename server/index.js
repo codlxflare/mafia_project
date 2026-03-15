@@ -349,8 +349,25 @@ function waitForNightChoice(io, code, roleKey) {
                     ? (r2.gameState.nightChoices.detectiveCheckId != null || r2.gameState.nightChoices.commissionerShotId != null)
                     : false);
         if (!hasNow) {
-          io.to(code).emit('host_says', { text: line, type: nudgeKey });
-          pushHostLine(r2, line);
+          const r3 = rooms.get(code);
+          const mafiaConn3 = roleKey === 'mafia' && r3?.gameState ? getAliveMafia(r3.gameState).filter((id) => isConnected(r3, id)) : [];
+          const hasNowSync =
+            r3?.gameState &&
+            (roleKey === 'mafia'
+              ? mafiaConn3.length > 0 && mafiaConn3.every((id) => r3.gameState.nightChoices.mafiaVotes?.[id] != null)
+              : roleKey === 'don_decides'
+                ? r3.gameState.nightChoices.donMafiaChoice !== undefined
+                : roleKey === 'don_check'
+                  ? r3.gameState.nightChoices.donCheckId != null
+                  : roleKey === 'doctor'
+                    ? r3.gameState.nightChoices.doctor != null
+                    : roleKey === 'detective'
+                      ? (r3.gameState.nightChoices.detectiveCheckId != null || r3.gameState.nightChoices.commissionerShotId != null)
+                      : false);
+          if (!hasNowSync) {
+            io.to(code).emit('host_says', { text: line, type: nudgeKey });
+            pushHostLine(r3 || r2, line);
+          }
         }
       }
     }, NIGHT_NUDGE_MS);
@@ -786,6 +803,20 @@ io.on('connection', (socket) => {
       return;
     }
     const name = normalizePlayerName(payload.playerName) || `Игрок ${room.playerIds.length + 1}`;
+    const lobbyDisconnected = room.lobbyDisconnectedIds || new Set();
+    const reconnectingId = [...lobbyDisconnected].find((id) => room.playerNames[id] === name);
+    if (reconnectingId != null) {
+      replacePlayerIdInRoom(room, reconnectingId, socket.id);
+      lobbyDisconnected.delete(reconnectingId);
+      if (lobbyDisconnected.size === 0) delete room.lobbyDisconnectedIds;
+      else room.lobbyDisconnectedIds = lobbyDisconnected;
+      socket.data.roomCode = trimmedCode;
+      socket.data.playerId = socket.id;
+      socket.join(trimmedCode);
+      cb({ joined: true, playerId: socket.id, isCreator: room.creatorId === socket.id });
+      io.to(trimmedCode).emit('room_updated', roomForClient(rooms.get(trimmedCode)));
+      return;
+    }
     socket.data.roomCode = trimmedCode;
     socket.data.playerId = socket.id;
     socket.join(trimmedCode);
@@ -793,7 +824,7 @@ io.on('connection', (socket) => {
     room.playerNames[socket.id] = name;
     if (!room.playerAvatars) room.playerAvatars = {};
     room.playerAvatars[socket.id] = room.playerAvatars[socket.id] || 'bear';
-    cb({ joined: true, playerId: socket.id });
+    cb({ joined: true, playerId: socket.id, isCreator: false });
     io.to(trimmedCode).emit('room_updated', roomForClient(rooms.get(trimmedCode)));
     const need = MIN_PLAYERS;
     const count = room.playerIds.length;
@@ -876,6 +907,7 @@ io.on('connection', (socket) => {
       if (v.excludedId === oldId) v.excludedId = newId;
     });
     room.disconnectedIds?.delete(oldId);
+    room.lobbyDisconnectedIds?.delete(oldId);
   }
 
   socket.on('rejoin_room', (payload, cb) => {
@@ -1028,7 +1060,8 @@ io.on('connection', (socket) => {
       voteTieFavorites: null,
     };
     room.phase = 'roles';
-    room.disconnectedIds = new Set();
+    room.disconnectedIds = new Set(room.lobbyDisconnectedIds || []);
+    delete room.lobbyDisconnectedIds;
     room.hostRecentLines = [];
     const code = socket.data.roomCode;
     io.to(code).emit('game_started', { playerIds: room.playerIds, phase: 'roles', roundIndex: 1 });
@@ -1257,6 +1290,12 @@ io.on('connection', (socket) => {
     if (room.voteCountingStarted) return;
     room.voteCountingStarted = true;
     try {
+    await delay(800);
+    const rBeforeCount = rooms.get(code);
+    if (!rBeforeCount?.gameState || rBeforeCount.phase !== 'voting' || !rBeforeCount.voteCountingStarted) {
+      if (rBeforeCount) rBeforeCount.voteCountingStarted = false;
+      return;
+    }
     const countingLine = await getHostLine('vote_counting', { voiceStyle: room.hostVoiceStyle, recentHostLines: (room.hostRecentLines || []).slice(-8), gameContext: buildGameContext(room) });
     io.to(code).emit('host_says', { text: countingLine, type: 'vote_counting' });
     pushHostLine(room, countingLine);
@@ -1282,24 +1321,109 @@ io.on('connection', (socket) => {
     if (tied.length > 1 || max === 0) {
       if (!r.voteTieFavorites) {
         r.voteTieFavorites = tied.map((e) => e[0]);
+        r.votes = {};
+        r.voteCountingStarted = false;
         io.to(code).emit('room_updated', roomForClient(r));
-        if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId: null, tie: true });
+        io.to(code).emit('vote_counts', { counts: {} });
+        if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: {}, excludedId: null, tie: true });
         if (r.battleLog) r.battleLog.push({ type: 'vote_tie', round: r.gameState.roundIndex ?? 1 });
         const line = await getHostLine('vote_tie_break', { voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
         io.to(code).emit('host_says', { text: line, type: 'vote_tie_break' });
         pushHostLine(r, line);
         await delay(speechDurationMs(line));
-        io.to(code).emit('vote_counts', { counts: {} });
         r._voteTieBreakEndTime = Date.now() + VOTE_TIE_BREAK_SEC * 1000;
         io.to(code).emit('vote_tie_break', { secondsLeft: VOTE_TIE_BREAK_SEC });
         await delay(VOTE_TIE_BREAK_SEC * 1000);
         const r2 = rooms.get(code);
         if (!r2?.gameState || r2.phase !== 'voting') return;
         delete r2._voteTieBreakEndTime;
-        r2.votes = {};
+        const al2 = getAlivePlayers(r2.gameState);
+        const fav2 = r2.voteTieFavorites || [];
+        const canVoteRevote = fav2.length ? al2.filter((id) => !fav2.includes(id)) : al2;
+        const canVoteRevoteConnected = canVoteRevote.filter((id) => isConnected(r2, id));
+        const validTargetsRevote = fav2.length ? fav2 : al2;
+        const countsRevote = {};
+        Object.entries(r2.votes || {}).forEach(([voterId, target]) => {
+          if (canVoteRevoteConnected.includes(voterId) && validTargetsRevote.includes(target)) countsRevote[target] = (countsRevote[target] || 0) + 1;
+        });
+        const entriesRevote = Object.entries(countsRevote).filter(([id]) => validTargetsRevote.includes(id));
+        const maxRevote = Math.max(...entriesRevote.map((e) => e[1]), 0);
+        const tiedRevote = entriesRevote.filter((e) => e[1] === maxRevote);
+        r2.voteTieFavorites = null;
         r2.voteCountingStarted = false;
         io.to(code).emit('room_updated', roomForClient(r2));
-        io.to(code).emit('phase', 'voting');
+        io.to(code).emit('vote_counts', { counts: {} });
+        if (tiedRevote.length > 1 || maxRevote === 0) {
+          r2.votes = {};
+          if (r2.voteHistory) r2.voteHistory.push({ round: r2.gameState.roundIndex ?? 1, votes: {}, excludedId: null, tie: true });
+          const lineTie = await getHostLine('vote_tie', { voiceStyle: r2.hostVoiceStyle, recentHostLines: (r2.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r2) });
+          io.to(code).emit('host_says', { text: lineTie, type: 'vote_tie' });
+          pushHostLine(r2, lineTie);
+          await delay(speechDurationMs(lineTie));
+          clearDiscussionTurnTimeout(r2);
+          r2.phase = 'night';
+          r2.gameState.roundIndex = (r2.gameState.roundIndex || 1) + 1;
+          io.to(code).emit('phase', 'night');
+          io.to(code).emit('round', r2.gameState.roundIndex);
+          runNightSequence(io, code);
+        } else {
+          const [excludedIdRevote] = tiedRevote[0];
+          r2.gameState.dead.add(excludedIdRevote);
+          const excludedNameRevote = r2.playerNames[excludedIdRevote];
+          const excludedRoleRevote = r2.gameState.roles[excludedIdRevote];
+          if (r2.voteHistory) r2.voteHistory.push({ round: r2.gameState.roundIndex ?? 1, votes: { ...(r2.votes || {}) }, excludedId: excludedIdRevote, tie: false });
+          r2.votes = {};
+          if (r2.battleLog) r2.battleLog.push({ type: 'vote_excluded', round: r2.gameState.roundIndex ?? 1, excludedName: excludedNameRevote });
+          io.to(code).emit('room_updated', roomForClient(r2));
+          const LAST_WORDS_MS_REVOTE = readDelay('MAFIA_LAST_WORDS_MS', 20000);
+          const lastWordsSecRevote = Math.round(LAST_WORDS_MS_REVOTE / 1000);
+          r2._excludedForLastWords = { playerId: excludedIdRevote, excludedName: excludedNameRevote, lastWordsSec: lastWordsSecRevote };
+          io.to(code).emit('player_excluded', { playerId: excludedIdRevote, excludedName: excludedNameRevote, lastWordsSec: lastWordsSecRevote });
+          await delay(LAST_WORDS_MS_REVOTE);
+          clearDiscussionTurnTimeout(r2);
+          delete r2._excludedForLastWords;
+          await delay(HOST_PAUSE_BEFORE_MS);
+          const voteLineRevote = await getHostLine('vote_result_summary', {
+            excludedName: excludedNameRevote,
+            excludedRole: excludedRoleRevote ? ROLE_NAMES_RU[excludedRoleRevote] || excludedRoleRevote : null,
+            excludedAvatarId: r2.playerAvatars?.[excludedIdRevote] ?? null,
+            round: r2.gameState.roundIndex ?? 1,
+            voiceStyle: r2.hostVoiceStyle,
+            recentHostLines: (r2.hostRecentLines || []).slice(-8),
+            gameContext: buildGameContext(r2),
+          });
+          io.to(code).emit('host_says', { text: voteLineRevote, type: 'vote_result_summary' });
+          pushHostLine(r2, voteLineRevote);
+          await delay(speechDurationAfterMs(voteLineRevote, 'vote_result_summary'));
+          const winRevote = checkWin(r2.gameState);
+          if (winRevote) {
+            clearDiscussionTurnTimeout(r2);
+            r2.phase = 'ended';
+            const rolesRevealRevote = r2.playerIds.map((id) => ({ name: r2.playerNames[id] || id, role: r2.gameState.roles[id], avatarId: r2.playerAvatars?.[id] ?? null }));
+            await delay(HOST_PAUSE_BEFORE_MS);
+            const endLineRevote = await getHostLine('game_end_summary', { winner: winRevote, voiceStyle: r2.hostVoiceStyle, recentHostLines: (r2.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r2) });
+            io.to(code).emit('host_says', { text: endLineRevote, type: 'game_end_summary' });
+            pushHostLine(r2, endLineRevote);
+            await delay(speechDurationMs(endLineRevote));
+            await delay(HOST_PAUSE_BEFORE_MS);
+            const revealLineRevote = await getHostLine('game_end_reveal', { rolesReveal: rolesRevealRevote, voiceStyle: r2.hostVoiceStyle, recentHostLines: (r2.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r2) });
+            io.to(code).emit('host_says', { text: revealLineRevote, type: 'game_end_reveal' });
+            pushHostLine(r2, revealLineRevote);
+            await delay(speechDurationMs(revealLineRevote));
+            io.to(code).emit('phase', 'ended');
+            io.to(code).emit('room_updated', roomForClient(r2));
+            const voteHistoryRevote = (r2.voteHistory || []).map((v) => ({ round: v.round, votes: v.tie ? null : Object.fromEntries(Object.entries(v.votes || {}).map(([id, targetId]) => [r2.playerNames[id] || id, r2.playerNames[targetId] || targetId])), excludedName: v.tie ? null : r2.playerNames[v.excludedId], tie: v.tie }));
+            r2.gameEndResult = { winner: winRevote, roles: r2.gameState.roles, playerNames: r2.playerNames, voteHistory: voteHistoryRevote, battleLog: r2.battleLog || [] };
+            io.to(code).emit('game_ended', r2.gameEndResult);
+          } else {
+            clearDiscussionTurnTimeout(r2);
+            r2.phase = 'night';
+            r2.gameState.roundIndex = (r2.gameState.roundIndex || 1) + 1;
+            io.to(code).emit('phase', 'night');
+            io.to(code).emit('round', r2.gameState.roundIndex);
+            runNightSequence(io, code);
+          }
+        }
         return;
       }
       delete r._voteTieBreakEndTime;
@@ -1435,6 +1559,9 @@ io.on('connection', (socket) => {
     room.gameState = null;
     room.gameEndResult = null;
     room._excludedForLastWords = null;
+    if (room.disconnectedIds?.size) {
+      room.lobbyDisconnectedIds = new Set(room.disconnectedIds);
+    }
     room.disconnectedIds = null;
     room.hostRecentLines = [];
     room.voteHistory = [];
@@ -1448,11 +1575,14 @@ io.on('connection', (socket) => {
     const room = getRoom(socket);
     if (!room) return;
     if (room.phase === 'lobby') {
-      room.playerIds = room.playerIds.filter((id) => id !== socket.id);
-      delete room.playerNames[socket.id];
-      delete room.playerAvatars?.[socket.id];
-      if (room.playerIds.length === 0) rooms.delete(socket.data.roomCode);
-      else io.to(socket.data.roomCode).emit('room_updated', roomForClient(rooms.get(socket.data.roomCode)));
+      if (!room.lobbyDisconnectedIds) room.lobbyDisconnectedIds = new Set();
+      room.lobbyDisconnectedIds.add(socket.id);
+      const code = socket.data.roomCode;
+      if (room.playerIds.length > 0 && room.playerIds.every((id) => room.lobbyDisconnectedIds.has(id))) {
+        rooms.delete(code);
+        return;
+      }
+      io.to(code).emit('room_updated', roomForClient(rooms.get(code)));
       return;
     }
     if (room.gameState) {
