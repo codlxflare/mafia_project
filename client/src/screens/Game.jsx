@@ -70,6 +70,7 @@ export default function Game({
   const [detectiveAction, setDetectiveAction] = useState(null);
   const [donResult, setDonResult] = useState(null);
   const [mafiaRevoteSec, setMafiaRevoteSec] = useState(null);
+  const nightStepRef = useRef(null);
   const discussionTimerRef = useRef(null);
   const lastWordsTimerRef = useRef(null);
   const discussionTurnTimerRef = useRef(null);
@@ -82,7 +83,23 @@ export default function Game({
   useEffect(() => { if (phase !== 'night') setMyChoice(null); setDetectiveAction(null); setDonResult(null); setMafiaRevoteSec(null); }, [phase]);
   useEffect(() => { if (nightTurn?.step !== 'detective') setDetectiveAction(null); }, [nightTurn?.step]);
   useEffect(() => { if (nightTurn?.step !== 'don_check') setDonResult(null); }, [nightTurn?.step]);
+  useEffect(() => {
+    const step = nightTurn?.step;
+    if (step === 'don_check' && (nightStepRef.current === 'mafia' || nightStepRef.current === 'don_decides')) setMyChoice(null);
+    nightStepRef.current = step;
+  }, [nightTurn?.step]);
   useEffect(() => { if (phase !== 'voting') setMyVote(null); }, [phase]);
+  const hadTieFavoritesRef = useRef(false);
+  const prevTieBreakSecRef = useRef(null);
+  useEffect(() => {
+    const hasTieFavorites = phase === 'voting' && (voteTieFavorites?.length ?? 0) > 0;
+    if (hasTieFavorites && !hadTieFavoritesRef.current) setMyVote(null);
+    hadTieFavoritesRef.current = !!hasTieFavorites;
+  }, [phase, voteTieFavorites]);
+  useEffect(() => {
+    if (phase === 'voting' && (voteTieFavorites?.length ?? 0) > 0 && tieBreakSecondsLeft === 0 && prevTieBreakSecRef.current !== 0) setMyVote(null);
+    prevTieBreakSecRef.current = tieBreakSecondsLeft;
+  }, [phase, voteTieFavorites, tieBreakSecondsLeft]);
   useEffect(() => {
     if (!socket || nightTurn?.step !== 'mafia') return;
     const onRevote = (data) => {

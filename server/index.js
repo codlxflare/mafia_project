@@ -1275,6 +1275,7 @@ io.on('connection', (socket) => {
     if (tied.length > 1 || max === 0) {
       if (!r.voteTieFavorites) {
         r.voteTieFavorites = tied.map((e) => e[0]);
+        io.to(code).emit('room_updated', roomForClient(r));
         if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId: null, tie: true });
         if (r.battleLog) r.battleLog.push({ type: 'vote_tie', round: r.gameState.roundIndex ?? 1 });
         const line = await getHostLine('vote_tie_break', { voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
