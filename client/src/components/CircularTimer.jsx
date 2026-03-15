@@ -8,11 +8,13 @@ export default function CircularTimer({ totalSeconds, secondsLeft, size = 64, cl
   const ratio = Math.min(1, sec / totalSeconds);
   const circumference = 2 * Math.PI * 15.5;
   const strokeDashoffset = circumference - ratio * circumference;
+  const isLastWords = typeof className === 'string' && className.includes('last-words');
+  const effectiveSize = isLastWords ? 36 : size;
 
   return (
     <div
-      className={className || 'circular-timer'}
-      style={{ width: size, height: size }}
+      className={[className || '', 'circular-timer'].filter(Boolean).join(' ')}
+      style={{ width: effectiveSize, height: effectiveSize }}
       role="timer"
       aria-live="polite"
       aria-valuenow={sec}

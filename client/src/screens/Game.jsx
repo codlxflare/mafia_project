@@ -83,7 +83,7 @@ export default function Game({
   }, [phase]);
   useEffect(() => { if (phase !== 'night') setMyChoice(null); setDetectiveAction(null); setDonResult(null); setMafiaRevoteSec(null); }, [phase]);
   useEffect(() => { if (nightTurn?.step !== 'detective') setDetectiveAction(null); }, [nightTurn?.step]);
-  useEffect(() => { if (nightTurn?.step !== 'don_check') setDonResult(null); }, [nightTurn?.step]);
+  useEffect(() => { if (nightTurn?.step === 'detective' || phase !== 'night') setDonResult(null); }, [nightTurn?.step, phase]);
   useEffect(() => {
     const step = nightTurn?.step;
     if (step === 'don_check' && nightStepRef.current !== 'don_check') setMyChoice(null);
@@ -107,6 +107,7 @@ export default function Game({
     if (!socket || nightTurn?.step !== 'mafia') return;
     const onRevote = (data) => {
       setMyChoice(null);
+      setDonResult(null);
       setMafiaRevoteSec(data?.secondsLeft ?? 10);
     };
     socket.on('mafia_tie_revote', onRevote);
@@ -449,7 +450,7 @@ export default function Game({
             <CircularTimer
               totalSeconds={excludedForLastWords?.lastWordsSec ?? 30}
               secondsLeft={lastWordsSecondsLeft ?? excludedForLastWords?.lastWordsSec}
-              size={72}
+              size={36}
               className="last-words-circular-timer"
               ariaLabel="Последнее слово, секунд"
             />
@@ -681,8 +682,8 @@ export default function Game({
         onSelectPlayer={tableOnSelect}
         detectiveCheckPlayerId={detectiveResult != null && myChoice?.id ? myChoice.id : null}
         detectiveCheckIsMafia={detectiveResult?.isMafia}
-        donCheckPlayerId={donResult?.targetId ?? null}
-        donCheckIsDetective={donResult?.isDetective}
+        donCheckPlayerId={nightTurn?.step !== 'don_check' ? (donResult?.targetId ?? null) : null}
+        donCheckIsDetective={nightTurn?.step !== 'don_check' ? donResult?.isDetective : undefined}
         voteCounts={voteCounts}
         mafiaVoteCountsByTarget={mafiaVoteCountsByTarget}
         mafiaTargetId={mafiaTargetId}
