@@ -375,6 +375,14 @@ export default function App() {
   useEffect(() => {
     if (!socket) return;
     const onHostSays = (payload) => addHostLineRef.current?.(payload);
+    const dropDayVotingFromTtsQueue = () => {
+      const q = ttsQueueRef.current;
+      const drop = new Set(['vote_start', 'day_discussion', 'vote_counting']);
+      ttsQueueRef.current = q.filter((item) => {
+        const t = typeof item === 'object' && item != null ? item.type : undefined;
+        return !drop.has(t);
+      });
+    };
     const onPhase = (p) => {
       log('phase', p);
       setPhase(p);
@@ -388,6 +396,7 @@ export default function App() {
       }
       if (p === 'night' || p === 'ended') setReactions([]);
       if (p === 'night' || p === 'ended') setExcludedForLastWords(null);
+      if (p === 'ended') dropDayVotingFromTtsQueue();
       if (p === 'day') setHostAnnouncedDay(true);
       else setHostAnnouncedDay(false);
     };
@@ -446,6 +455,12 @@ export default function App() {
     });
     socket.on('round', (r) => setRoundIndex(r));
     socket.on('game_ended', (data) => {
+      const q = ttsQueueRef.current;
+      const drop = new Set(['vote_start', 'day_discussion', 'vote_counting']);
+      ttsQueueRef.current = q.filter((item) => {
+        const t = typeof item === 'object' && item != null ? item.type : undefined;
+        return !drop.has(t);
+      });
       setPhase('ended');
       setGameResult(data || null);
     });

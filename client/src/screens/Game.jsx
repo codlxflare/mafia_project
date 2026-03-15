@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { getAvatarEmoji } from '../avatars';
+import CircularTimer from '../components/CircularTimer';
 
 const ROLE_NAMES = {
   mafia: 'Мафия',
@@ -89,6 +90,7 @@ export default function Game({
     nightStepRef.current = step;
   }, [nightTurn?.step]);
   useEffect(() => { if (phase !== 'voting') setMyVote(null); }, [phase]);
+  useEffect(() => { if (phase === 'voting') setVotingStarting(false); }, [phase]);
   const hadTieFavoritesRef = useRef(false);
   const prevTieBreakSecRef = useRef(null);
   const voteTieFavorites = room?.voteTieFavorites;
@@ -153,7 +155,9 @@ export default function Game({
   useEffect(() => {
     if (!socket || !playTurnSound) return;
     const onStart = (data) => {
-      setDiscussionTurn({ playerId: data.playerId, playerName: data.playerName, secondsLeft: data.turnSec ?? 60 });
+      const total = data.totalTurnSec ?? data.turnSec ?? 60;
+      const left = data.turnSec ?? total;
+      setDiscussionTurn({ playerId: data.playerId, playerName: data.playerName, secondsLeft: left, totalSeconds: total });
       playTurnSound('start');
     };
     const onEnd = () => playTurnSound('end');
@@ -441,9 +445,15 @@ export default function Game({
           <p className="last-words-title">
             {lastWordsCountdownDone ? 'Ожидание объявления ведущего…' : 'Последнее слово — говорите вслух'}
           </p>
-          <p className="last-words-timer">
-            {lastWordsCountdownDone ? '' : (lastWordsSecondsLeft != null ? lastWordsSecondsLeft : excludedForLastWords.lastWordsSec) + ' сек'}
-          </p>
+          {!lastWordsCountdownDone && (lastWordsSecondsLeft != null || excludedForLastWords?.lastWordsSec != null) && (
+            <CircularTimer
+              totalSeconds={excludedForLastWords?.lastWordsSec ?? 30}
+              secondsLeft={lastWordsSecondsLeft ?? excludedForLastWords?.lastWordsSec}
+              size={72}
+              className="last-words-circular-timer"
+              ariaLabel="Последнее слово, секунд"
+            />
+          )}
         </div>
       )}
       {isDead && !excludedForLastWords?.playerId && (
@@ -466,7 +476,10 @@ export default function Game({
       {phase === 'night' && nightTurn?.step === 'mafia' && !isDead && nightChoiceAllowed && (
         <div className="night-choice night-choice--mafia night-choice--table-only">
           {mafiaRevoteSec != null && mafiaRevoteSec > 0 && (
-            <p className="night-choice-hint" style={{ marginBottom: 8 }}>Переголосование: {mafiaRevoteSec} с</p>
+            <div className="circular-timer-wrap" style={{ marginBottom: 12 }}>
+              <CircularTimer totalSeconds={10} secondsLeft={mafiaRevoteSec} size={56} ariaLabel="Переголосование мафии, секунд" />
+              <p className="night-choice-hint" style={{ marginTop: 6, marginBottom: 0 }}>Переголосование</p>
+            </div>
           )}
           {mafiaVotesSummary.length > 0 && (
             <p className="night-choice-hint mafia-votes-summary">
@@ -585,7 +598,16 @@ export default function Game({
           {discussionTurn ? (
             <div className={`discussion-now ${discussionTurn.playerId === playerId ? 'discussion-now--you' : ''}`} aria-live="polite">
               <span className="discussion-now-name">{discussionTurn.playerId === playerId ? 'Вы' : discussionTurn.playerName}</span>
-              <span className="discussion-now-time">{discussionTurn.secondsLeft != null ? discussionTurn.secondsLeft : '—'} с</span>
+              {discussionTurn.secondsLeft != null && discussionTurn.totalSeconds != null ? (
+                <CircularTimer
+                  totalSeconds={discussionTurn.totalSeconds}
+                  secondsLeft={discussionTurn.secondsLeft}
+                  size={48}
+                  ariaLabel="Время хода, секунд"
+                />
+              ) : (
+                <span className="discussion-now-time">{discussionTurn.secondsLeft != null ? discussionTurn.secondsLeft : '—'} с</span>
+              )}
             </div>
           ) : (
             <div className="discussion-now discussion-now--idle" aria-hidden>—</div>
@@ -614,24 +636,8 @@ export default function Game({
             {voteTieFavorites?.length ? 'Переголосование: только между фаворитами' : 'Голосование: кого исключить?'}
           </h3>
           {voteTieFavorites?.length > 0 && tieBreakSecondsLeft != null && (
-            <div className="vote-tie-timer" aria-live="polite" role="timer" aria-valuenow={tieBreakSecondsLeft} aria-valuemin={0} aria-valuemax={30}>
-              <svg className="vote-tie-timer-ring" viewBox="0 0 36 36">
-                <path
-                  className="vote-tie-timer-ring-bg"
-                  d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"
-                  fill="none"
-                  strokeWidth="3"
-                />
-                <path
-                  className="vote-tie-timer-ring-fill"
-                  d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"
-                  fill="none"
-                  strokeWidth="3"
-                  strokeDasharray={97.5}
-                  strokeDashoffset={97.5 - (tieBreakSecondsLeft / 30) * 97.5}
-                />
-              </svg>
-              <span className="vote-tie-timer-value">{tieBreakSecondsLeft}</span>
+            <div className="vote-tie-timer-wrap">
+              <CircularTimer totalSeconds={30} secondsLeft={tieBreakSecondsLeft} size={64} className="vote-tie-timer" ariaLabel="Переголосование, секунд" />
             </div>
           )}
           {!canVoteInTieBreak ? (
