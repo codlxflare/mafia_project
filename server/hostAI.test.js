@@ -30,6 +30,11 @@ describe('hostAI fallback (без API ключа)', () => {
     assert(line.includes('5') || line.includes('пять') || line.includes('человек'));
   });
 
+  it('players_enter_room возвращает строку с числом игроков', async () => {
+    const line = await getHostLine('players_enter_room', { playerCount: 6, playerNames: { a: 'Аня', b: 'Боря' } });
+    assert(typeof line === 'string' && line.length > 0);
+  });
+
   it('game_start возвращает короткую фразу', async () => {
     const line = await getHostLine('game_start');
     assert(typeof line === 'string' && line.length > 0);

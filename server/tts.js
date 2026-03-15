@@ -37,6 +37,7 @@ const ELEVEN_V3_EMOTION_BY_TYPE = {
   night_nudge_doctor: '[suspense] ',
   night_nudge_detective: '[suspense] ',
   room_created: '[friendly] ',
+  players_enter_room: '[friendly] ',
   player_joined: '[friendly] ',
   rules_explanation: '[friendly] ',
 };

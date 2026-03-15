@@ -1072,6 +1072,17 @@ io.on('connection', (socket) => {
     room.hostRecentLines = [];
     const code = socket.data.roomCode;
     io.to(code).emit('game_started', { playerIds: room.playerIds, phase: 'roles', roundIndex: 1 });
+    const enterLine = await getHostLine('players_enter_room', {
+      playerCount: room.playerIds.length,
+      playerNames: room.playerNames,
+      voiceStyle: room.hostVoiceStyle,
+      recentHostLines: (room.hostRecentLines || []).slice(-8),
+      gameContext: buildGameContext(room),
+    });
+    log('Server', '[host]', 'step=players_enter_room', '|', enterLine);
+    io.to(code).emit('host_says', { text: enterLine, type: 'players_enter_room' });
+    pushHostLine(room, enterLine);
+    await delay(speechDurationMs(enterLine));
     const startLine = await getHostLine('game_start', { voiceStyle: room.hostVoiceStyle, recentHostLines: (room.hostRecentLines || []).slice(-8), gameContext: buildGameContext(room) });
     log('Server', '[host]', 'step=game_start', '|', startLine);
     io.to(code).emit('host_says', { text: startLine, type: 'game_start' });

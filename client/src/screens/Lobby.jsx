@@ -7,8 +7,6 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
   const playerAvatars = room?.playerAvatars || {};
   const count = playerIds.length;
   const canStart = count >= 5;
-  const timerSec = room?.discussionTimerSec ?? 120;
-  const turnSec = room?.discussionTurnSec ?? 60;
   const voiceStyle = room?.hostVoiceStyle ?? 'funny';
   const myAvatar = playerAvatars[playerId] || 'fox';
 
@@ -56,30 +54,6 @@ export default function Lobby({ roomCode, room, playerId, onSetAvatar, isCreator
 
       {isCreator && (
         <div className="lobby-settings">
-          <label>
-            <span>Время обсуждения (мин)</span>
-            <select
-              value={Math.round(timerSec / 60)}
-              onChange={(e) => onRoomSettings?.({ discussionTimerSec: Number(e.target.value) * 60 })}
-            >
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-            </select>
-          </label>
-          <label>
-            <span>Время на слово (сек)</span>
-            <select
-              value={turnSec}
-              onChange={(e) => onRoomSettings?.({ discussionTurnSec: Number(e.target.value) })}
-            >
-              <option value={30}>30</option>
-              <option value={45}>45</option>
-              <option value={60}>60</option>
-              <option value={90}>90</option>
-              <option value={120}>120</option>
-            </select>
-          </label>
           <label>
             <span>Стиль ведущего</span>
             <select
