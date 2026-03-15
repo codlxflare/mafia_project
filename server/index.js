@@ -1298,14 +1298,19 @@ io.on('connection', (socket) => {
     if (room.voteCountingStarted) return;
     if (room.voteTieFavorites) return;
     room.voteCountingStarted = true;
+    log('Server', '[vote]', 'vote_count_start', 'code=', code);
     try {
     await delay(1200);
+    log('Server', '[vote]', 'vote_count_after_delay_1200');
     const rBeforeCount = rooms.get(code);
     if (!rBeforeCount?.gameState || rBeforeCount.phase !== 'voting' || !rBeforeCount.voteCountingStarted) {
+      log('Server', '[vote]', 'vote_count_abort', 'no_room_or_phase');
       if (rBeforeCount) rBeforeCount.voteCountingStarted = false;
       return;
     }
+    log('Server', '[vote]', 'vote_count_before_getHostLine_counting');
     const countingLine = await getHostLine('vote_counting', { voiceStyle: room.hostVoiceStyle, recentHostLines: (room.hostRecentLines || []).slice(-8), gameContext: buildGameContext(room) });
+    log('Server', '[vote]', 'vote_count_after_getHostLine_counting');
     log('Server', '[host]', 'step=vote_counting', '|', countingLine);
     io.to(code).emit('host_says', { text: countingLine, type: 'vote_counting' });
     pushHostLine(room, countingLine);
@@ -1325,10 +1330,12 @@ io.on('connection', (socket) => {
     const entries = Object.entries(counts).filter(([id]) => validTargets.includes(id));
     const max = Math.max(...entries.map((e) => e[1]), 0);
     const tied = entries.filter((e) => e[1] === max);
+    log('Server', '[vote]', 'vote_count_result', 'max=', max, 'tiedLength=', tied.length, 'branch=', tied.length > 1 || max === 0 ? 'tie' : 'single');
 
     io.to(code).emit('vote_counts', { counts: { ...counts } });
 
     if (tied.length > 1 || max === 0) {
+      log('Server', '[vote]', 'vote_branch_tie');
       if (!r.voteTieFavorites) {
         r.voteTieFavorites = tied.map((e) => e[0]);
         r.votes = {};
@@ -1340,15 +1347,21 @@ io.on('connection', (socket) => {
         r._voteTieBreakEndTime = Date.now() + VOTE_TIE_BREAK_SEC * 1000;
         io.to(code).emit('vote_tie_break', { secondsLeft: VOTE_TIE_BREAK_SEC });
         const tieBreakStart = Date.now();
+        log('Server', '[vote]', 'vote_tie_before_getHostLine_tie_break');
         const line = await getHostLine('vote_tie_break', { voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
+        log('Server', '[vote]', 'vote_tie_after_getHostLine_tie_break');
         log('Server', '[host]', 'step=vote_tie_break', '|', line);
         io.to(code).emit('host_says', { text: line, type: 'vote_tie_break' });
         pushHostLine(r, line);
         await delay(speechDurationMs(line));
         const tieBreakElapsed = Date.now() - tieBreakStart;
         await delay(Math.max(0, VOTE_TIE_BREAK_SEC * 1000 - tieBreakElapsed));
+        log('Server', '[vote]', 'vote_tie_after_delay_30s');
         const r2 = rooms.get(code);
-        if (!r2?.gameState || r2.phase !== 'voting') return;
+        if (!r2?.gameState || r2.phase !== 'voting') {
+          log('Server', '[vote]', 'vote_tie_revote_abort', 'no_room_or_phase');
+          return;
+        }
         delete r2._voteTieBreakEndTime;
         const al2 = getAlivePlayers(r2.gameState);
         const fav2 = r2.voteTieFavorites || [];
@@ -1366,7 +1379,9 @@ io.on('connection', (socket) => {
         r2.voteCountingStarted = false;
         io.to(code).emit('room_updated', roomForClient(r2));
         io.to(code).emit('vote_counts', { counts: {} });
+        log('Server', '[vote]', 'vote_revote_result', 'tiedRevoteLength=', tiedRevote.length, 'maxRevote=', maxRevote);
         if (tiedRevote.length > 1 || maxRevote === 0) {
+          log('Server', '[vote]', 'vote_revote_branch_tie_again');
           r2.votes = {};
           if (r2.voteHistory) r2.voteHistory.push({ round: r2.gameState.roundIndex ?? 1, votes: {}, excludedId: null, tie: true });
           const lineTie = await getHostLine('vote_tie', { voiceStyle: r2.hostVoiceStyle, recentHostLines: (r2.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r2) });
@@ -1381,6 +1396,7 @@ io.on('connection', (socket) => {
           io.to(code).emit('round', r2.gameState.roundIndex);
           runNightSequence(io, code);
         } else {
+          log('Server', '[vote]', 'vote_revote_branch_single');
           const [excludedIdRevote] = tiedRevote[0];
           r2.gameState.dead.add(excludedIdRevote);
           const excludedNameRevote = r2.playerNames[excludedIdRevote];
@@ -1393,10 +1409,18 @@ io.on('connection', (socket) => {
           const lastWordsSecRevote = Math.round(LAST_WORDS_MS_REVOTE / 1000);
           r2._excludedForLastWords = { playerId: excludedIdRevote, excludedName: excludedNameRevote, lastWordsSec: lastWordsSecRevote };
           io.to(code).emit('player_excluded', { playerId: excludedIdRevote, excludedName: excludedNameRevote, lastWordsSec: lastWordsSecRevote });
+          const announceLineRevote = `Город исключил ${excludedNameRevote}. Последнее слово — ${lastWordsSecRevote} секунд.`;
+          log('Server', '[host]', 'step=player_excluded_announce (revote)', '|', announceLineRevote);
+          io.to(code).emit('host_says', { text: announceLineRevote, type: 'player_excluded_announce' });
+          pushHostLine(r2, announceLineRevote);
+          await delay(speechDurationMs(announceLineRevote));
+          log('Server', '[vote]', 'vote_revote_before_last_words_delay', 'ms=', LAST_WORDS_MS_REVOTE);
           await delay(LAST_WORDS_MS_REVOTE);
+          log('Server', '[vote]', 'vote_revote_after_last_words_delay');
           clearDiscussionTurnTimeout(r2);
           delete r2._excludedForLastWords;
           await delay(HOST_PAUSE_BEFORE_MS);
+          log('Server', '[vote]', 'vote_revote_before_getHostLine_result_summary');
           const voteLineRevote = await getHostLine('vote_result_summary', {
             excludedName: excludedNameRevote,
             excludedRole: excludedRoleRevote ? ROLE_NAMES_RU[excludedRoleRevote] || excludedRoleRevote : null,
@@ -1443,10 +1467,13 @@ io.on('connection', (socket) => {
         }
         return;
       }
+      log('Server', '[vote]', 'vote_branch_tie_had_favorites_no_revote');
       delete r._voteTieBreakEndTime;
       r.voteTieFavorites = null;
       if (r.voteHistory) r.voteHistory.push({ round: r.gameState.roundIndex ?? 1, votes: { ...r.votes }, excludedId: null, tie: true });
+      log('Server', '[vote]', 'vote_tie_before_getHostLine_vote_tie');
       const line = await getHostLine('vote_tie', { voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
+      log('Server', '[vote]', 'vote_tie_after_getHostLine_vote_tie');
       log('Server', '[host]', 'step=vote_tie', '|', line);
       io.to(code).emit('host_says', { text: line, type: 'vote_tie' });
       pushHostLine(r, line);
@@ -1460,6 +1487,7 @@ io.on('connection', (socket) => {
       runNightSequence(io, code);
       return;
     }
+    log('Server', '[vote]', 'vote_branch_single_winner');
     const [excludedId] = tied[0];
     r.gameState.dead.add(excludedId);
     const excludedName = r.playerNames[excludedId];
@@ -1473,10 +1501,19 @@ io.on('connection', (socket) => {
     const lastWordsSec = Math.round(LAST_WORDS_MS / 1000);
     r._excludedForLastWords = { playerId: excludedId, excludedName, lastWordsSec };
     io.to(code).emit('player_excluded', { playerId: excludedId, excludedName, lastWordsSec });
+    log('Server', '[vote]', 'vote_single_after_player_excluded');
+    const announceLine = `Город исключил ${excludedName}. Последнее слово — ${lastWordsSec} секунд.`;
+    log('Server', '[host]', 'step=player_excluded_announce', '|', announceLine);
+    io.to(code).emit('host_says', { text: announceLine, type: 'player_excluded_announce' });
+    pushHostLine(r, announceLine);
+    await delay(speechDurationMs(announceLine));
+    log('Server', '[vote]', 'vote_single_before_last_words_delay', 'ms=', LAST_WORDS_MS);
     await delay(LAST_WORDS_MS);
+    log('Server', '[vote]', 'vote_single_after_last_words_delay');
     clearDiscussionTurnTimeout(r);
     delete r._excludedForLastWords;
     await delay(HOST_PAUSE_BEFORE_MS);
+    log('Server', '[vote]', 'vote_single_before_getHostLine_result_summary');
     const voteLine = await getHostLine('vote_result_summary', {
       excludedName,
       excludedRole: excludedRole ? ROLE_NAMES_RU[excludedRole] || excludedRole : null,
@@ -1487,12 +1524,15 @@ io.on('connection', (socket) => {
       gameContext: buildGameContext(r),
     });
     log('Server', '[host]', 'step=vote_result_summary', '|', voteLine);
+    log('Server', '[vote]', 'vote_single_after_getHostLine_result_summary');
     io.to(code).emit('host_says', { text: voteLine, type: 'vote_result_summary' });
     pushHostLine(r, voteLine);
     await delay(speechDurationAfterMs(voteLine, 'vote_result_summary'));
     r.votes = {};
     const win = checkWin(r.gameState);
+    log('Server', '[vote]', 'vote_single_after_result', 'win=', win || 'none');
     if (win) {
+      log('Server', '[vote]', 'vote_single_game_ended');
       clearDiscussionTurnTimeout(r);
       r.phase = 'ended';
       const rolesReveal = r.playerIds.map((id) => ({
@@ -1501,13 +1541,17 @@ io.on('connection', (socket) => {
         avatarId: r.playerAvatars?.[id] ?? null,
       }));
       await delay(HOST_PAUSE_BEFORE_MS);
+      log('Server', '[vote]', 'vote_single_before_getHostLine_game_end_summary');
       const endLine = await getHostLine('game_end_summary', { winner: win, voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
+      log('Server', '[vote]', 'vote_single_after_getHostLine_game_end_summary');
       log('Server', '[host]', 'step=game_end_summary', '|', endLine);
       io.to(code).emit('host_says', { text: endLine, type: 'game_end_summary' });
       pushHostLine(r, endLine);
       await delay(speechDurationMs(endLine));
       await delay(HOST_PAUSE_BEFORE_MS);
+      log('Server', '[vote]', 'vote_single_before_getHostLine_game_end_reveal');
       const revealLine = await getHostLine('game_end_reveal', { rolesReveal, voiceStyle: r.hostVoiceStyle, recentHostLines: (r.hostRecentLines || []).slice(-8), gameContext: buildGameContext(r) });
+      log('Server', '[vote]', 'vote_single_after_getHostLine_game_end_reveal');
       log('Server', '[host]', 'step=game_end_reveal', '|', revealLine);
       io.to(code).emit('host_says', { text: revealLine, type: 'game_end_reveal' });
       pushHostLine(r, revealLine);
@@ -1535,9 +1579,11 @@ io.on('connection', (socket) => {
       r.gameState.roundIndex = (r.gameState.roundIndex || 1) + 1;
       io.to(code).emit('phase', 'night');
       io.to(code).emit('round', r.gameState.roundIndex);
+      log('Server', '[vote]', 'vote_single_going_night');
       runNightSequence(io, code);
     }
     } catch (voteErr) {
+      log('Server', '[vote]', 'vote_count_ERROR', voteErr?.message || voteErr, voteErr?.stack);
       if (room) room.voteCountingStarted = false;
       throw voteErr;
     }
