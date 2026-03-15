@@ -416,6 +416,16 @@ export default function App() {
       setNightStep(null);
       setNightTurn(null);
       setGameResult(null);
+      // Чтобы не задерживать реплики игры: сбрасываем очередь озвучки и останавливаем текущую (объявления из лобби)
+      ttsQueueRef.current = [];
+      const audio = ttsAudioRef.current;
+      if (audio) {
+        if (typeof audio.stop === 'function') audio.stop(0);
+        else if (typeof audio.pause === 'function') audio.pause();
+        ttsAudioRef.current = null;
+      }
+      ttsPlayingRef.current = false;
+      processTtsQueue();
     });
     socket.on('phase', onPhase);
     socket.on('host_announced', (step) => {
