@@ -534,8 +534,8 @@ async function runNightSequence(io, code) {
   let mafiaKill = mafiaVictimId && al.includes(mafiaVictimId) ? mafiaVictimId : null;
   if (savedId === mafiaKill) mafiaKill = null;
 
-  let commissionerKill = commissionerShotId && al.includes(commissionerShotId) ? commissionerShotId : null;
-  if (savedId === commissionerKill) commissionerKill = null;
+  // Выстрел комиссара (детектива) не отменяется доктором — доктор спасает только от мафии
+  const commissionerKill = commissionerShotId && al.includes(commissionerShotId) ? commissionerShotId : null;
 
   const victimIds = [...new Set([mafiaKill, commissionerKill].filter(Boolean))];
   r.gameState.lastKilled = mafiaKill ?? commissionerKill ?? null;

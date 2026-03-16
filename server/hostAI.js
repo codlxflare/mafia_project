@@ -140,18 +140,20 @@ const FALLBACK = {
   night_nudge_detective: () => 'Детектив, кого проверяем?',
 };
 
-/** Одна строка исхода ночи для ведущего. Имена погибших — без ролей (роли не раскрывать до финала). */
+/** Одна строка исхода ночи для ведущего. Имена погибших — без ролей (роли не раскрывать до финала). Учитывает мафию и выстрел комиссара. */
 function buildNightOutcomeLine(d) {
   const n = d.victimCount ?? (d.killedName ? 1 : 0);
+  const victims = d.victims && Array.isArray(d.victims) ? d.victims : [];
   const parts = [];
   if (n === 0) {
     parts.push('Ночью никто не погиб.');
     if (d.savedByName) parts.push('Доктор кого-то спас.');
-  } else if (n === 1 && d.victims?.[0]) {
-    parts.push(`Ночью погиб ${d.victims[0].name}.`);
+  } else if (n === 1 && victims[0]) {
+    parts.push(`Ночью погиб ${victims[0].name}.`);
     if (d.savedByName) parts.push('Доктор кого-то спас.');
-  } else if (n === 2 && d.victims?.length === 2) {
-    parts.push(`Ночью погибли ${d.victims[0].name} и ${d.victims[1].name}.`);
+  } else if (n >= 2 && victims.length >= 2) {
+    const names = victims.slice(0, n).map((v) => v.name).filter(Boolean);
+    parts.push(names.length ? `Ночью погибли ${names.join(' и ')}.` : 'Ночью погибли двое.');
   } else if (d.killedName) {
     parts.push(`Ночью погиб ${d.killedName}.`);
   }
@@ -289,7 +291,7 @@ function userMessage(type, data = {}) {
       break;
     case 'night_summary': {
       const outcomeLine = buildNightOutcomeLine(data);
-      base = `Факт этой ночи: ${outcomeLine}\n\nОзвучь именно это. Если есть погибший — назови по имени, роль не раскрывай. Запрещено говорить «ночью ничего не было», если в фактах перечислен погибший. Не раскрывай кто убил. Доктора можно упомянуть только как «доктор кого-то спас». Проверку детектива не упоминай. Раунд ${data.round || 1}. Своими словами, разнообразно. В конце объяви обсуждение.`;
+      base = `Факт этой ночи: ${outcomeLine}\n\nОзвучь именно это. Если погиб один — назови по имени. Если погибли несколько (мафия и/или выстрел комиссара) — назови всех погибших по именам. Роль не раскрывай. Запрещено говорить «ночью ничего не было», если в фактах перечислен погибший. Не раскрывай кто убил. Доктора можно упомянуть только как «доктор кого-то спас». Проверку детектива не упоминай. Раунд ${data.round || 1}. Своими словами, разнообразно. В конце объяви обсуждение.`;
       break;
     }
     case 'day_discussion':
